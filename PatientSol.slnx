@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="PatientAPI/PatientAPI.csproj" />
+  <Project Path="PatientConsoleWithoutDocker/PatientConsoleWithoutDocker.csproj" Id="abc8faba-14e7-47f5-86f5-924daca6d7e6" />
+</Solution>

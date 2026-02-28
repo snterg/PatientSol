@@ -1,0 +1,51 @@
+﻿version: '3.8'
+
+services:
+  # Контейнер с SQL Server
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: patient_db
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "6d:dyW[=(ZFFc£2*Kg04HB_-"
+      MSSQL_PID: "Express"
+    ports:
+      - "1433:1433"  # Проброс порта для внешнего доступа (опционально)
+    volumes:
+      - sql_data:/var/opt/mssql  # Сохраняем данные БД между перезапусками
+    networks:
+      - patient_network
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "6d:dyW[=(ZFFc£2*Kg04HB_-", "-Q", "SELECT 1", "-C"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Контейнер с вашим Web API
+  patientapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: patient_api
+    ports:
+      - "5000:80"  # Проброс порта: локальный 5000 -> контейнер 80
+      - "5001:443" # Для HTTPS (если нужно)
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80  # Только HTTP для простоты
+      - ConnectionStrings__DefaultConnection=Server=db;Database=PatientDb;User Id=sa;Password=6d:dyW[=(ZFFc£2*Kg04HB_-;TrustServerCertificate=True;
+    depends_on:
+      db:
+        condition: service_healthy  # Ждем, пока БД будет готова
+    networks:
+      - patient_network
+
+# Определяем сеть для связи контейнеров
+networks:
+  patient_network:
+    driver: bridge
+
+# Том для хранения данных БД
+volumes:
+  sql_data:
