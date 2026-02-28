@@ -608,13 +608,13 @@ public class PatientsController : ControllerBase
     }
     #endregion#region Get dictionaries (GET /api/patients/valid-values)
 
-    #region Get dictionaries (GET /api/patients/valid-values)
+    #region Get dictionaries (GET /api/patients/info)
     /// <summary>
     /// Gets valid values for dictionaries and API version
     /// </summary>
     /// <returns>Dictionary values and API version</returns>
     /// <response code="200">Returns dictionary values and version</response>
-    [HttpGet("valid-values")]
+    [HttpGet("info")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public ActionResult<object> GetValidValues()
     {
@@ -642,9 +642,6 @@ public class PatientsController : ControllerBase
             apiName = "Patient API",
             description = "API for patient management",
             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
-
-            // Timestamp
-            timestamp = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
         });
     }
     #endregion

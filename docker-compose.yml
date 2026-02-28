@@ -1,0 +1,6 @@
+services:
+  patientapi:
+    image: ${DOCKER_REGISTRY-}patientapi
+    build:
+      context: PatientAPI
+      dockerfile: Dockerfile

@@ -1,0 +1,6 @@
+services:
+  patientapi:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "80"

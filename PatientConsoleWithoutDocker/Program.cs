@@ -2,12 +2,13 @@
 using System.Text;
 using System.Text.Json;
 
-namespace PatientGenerator;
+namespace PatientConsoleWithoutDocker;
 
 class Program
 {
     private static readonly HttpClient client = new HttpClient();
     private static readonly Random random = new Random();
+    private static string _baseUrl = "http://localhost:5000";
 
     // Мужские имена
     private static readonly string[] maleFirstNames = { "Иван", "Петр", "Сергей", "Алексей", "Дмитрий", "Андрей", "Михаил", "Николай", "Александр", "Владимир" };
@@ -28,82 +29,169 @@ class Program
     private static int _successCount = 0;
     private static int _failCount = 0;
     private static readonly object _lockObject = new object();
+    private static bool _apiAvailable = false;
 
     static async Task Main(string[] args)
     {
-        string baseUrl = "http://localhost:5000";
-        client.BaseAddress = new Uri(baseUrl);
+        Console.OutputEncoding = Encoding.UTF8;
 
-        Console.WriteLine("______  ___ _____ _____ _____ _   _ _____   _____ _____ _   _  _____  _____ _      _____ \r\n| ___ \\/ _ \\_   _|_   _|  ___| \\ | |_   _| /  __ \\  _  | \\ | |/  ___||  _  | |    |  ___|\r\n| |_/ / /_\\ \\| |   | | | |__ |  \\| | | |   | /  \\/ | | |  \\| |\\ `--. | | | | |    | |__  \r\n|  __/|  _  || |   | | |  __|| . ` | | |   | |   | | | | . ` | `--. \\| | | | |    |  __| \r\n| |   | | | || |  _| |_| |___| |\\  | | |   | \\__/\\ \\_/ / |\\  |/\\__/ /\\ \\_/ / |____| |___ \r\n\\_|   \\_| |_/\\_/  \\___/\\____/\\_| \\_/ \\_/    \\____/\\___/\\_| \\_/\\____/  \\___/\\_____/\\____/ \r\n                                                                                         \r\n                                                                                         ");
-        Console.WriteLine("                    _               __   _____  _____ \r\n                   (_)             /  | |  _  ||  _  |\r\n__   _____ _ __ ___ _  ___  _ __   `| | | |/' || |/' |\r\n\\ \\ / / _ \\ '__/ __| |/ _ \\| '_ \\   | | |  /| ||  /| |\r\n \\ V /  __/ |  \\__ \\ | (_) | | | | _| |_\\ |_/ /\\ |_/ /\r\n  \\_/ \\___|_|  |___/_|\\___/|_| |_| \\___(_)___(_)\\___/ \r\n                                                      \r\n                                                      \r\n");
-        // Проверка API через маршрут count
-        Console.WriteLine("\nChecking API connection...");
-        int currentCount = await GetCurrentPatientCount();
+        ShowAsciiArt();
 
-        if (currentCount == -1)
+        // Настройка подключения к API
+        await SetupApiConnection();
+
+
         {
-            Console.WriteLine(" Cannot connect to API. Make sure it's running.");
-            Console.WriteLine("\nPress any key to exit...");
+            Console.WriteLine("Не удалось подключиться к API. Программа будет завершена.");
+            Console.WriteLine("\nНажмите любую клавишу для выхода...");
             Console.ReadKey();
             return;
         }
 
-        Console.WriteLine($" API is accessible. Current patients: {currentCount}");
-
-        // Проверка текущего количества записей
-        if (currentCount >= 100)
+        // Главное меню
+        bool exit = false;
+        while (!exit)
         {
-            Console.WriteLine("\n Cannot generate more patients!");
-            Console.WriteLine($"Maximum limit of 100 patients has been reached.");
-            Console.WriteLine($"Current count: {currentCount}/100");
-            Console.WriteLine("\nPress any key to exit...");
-            Console.WriteLine("  ___  ___________ _____   _____  _____  _____   ____ \r\n / _ \\|  __ \\  _  \\_   _| / __  \\|  _  |/ __  \\ / ___|\r\n/ /_\\ \\ |  \\/ | | | | |   `' / /'| |/' |`' / /'/ /___ \r\n|  _  | | __| | | | | |     / /  |  /| |  / /  | ___ \\\r\n| | | | |_\\ \\ |/ /  | |   ./ /___\\ |_/ /./ /___| \\_/ |\r\n\\_| |_/\\____/___/   \\_/   \\_____/ \\___/ \\_____/\\_____/\r\n                                                      \r\n                                                      \r\n");
-            Console.ReadKey();
-            return;
+            ShowMainMenu();
+            string choice = Console.ReadLine() ?? "";
+
+            switch (choice)
+            {
+                case "1":
+                    await AutoFillDatabase();
+                    break;
+                case "2":
+                    await FillFromFile();
+                    break;
+                case "3":
+                    await ManualFill();
+                    break;
+                case "4":
+                    await ShowCurrentCount();
+                    break;
+                case "5":
+                    await TestConnection();
+                    break;
+                case "0":
+                    exit = true;
+                    Console.WriteLine("Выход из программы...");
+                    break;
+                default:
+                    Console.WriteLine("Неверный выбор. Пожалуйста, выберите пункт из меню.");
+                    break;
+            }
+
+            if (!exit)
+            {
+                Console.WriteLine("\nНажмите любую клавишу для продолжения...");
+                Console.ReadKey();
+            }
         }
+    }
 
-        int patientsToGenerate = 100 - currentCount;
-        Console.WriteLine($"\nWill generate {patientsToGenerate} new patients (to reach 100 total)");
+    #region UI Methods
 
-        // Разбиваем на два потока
-        int batch1 = patientsToGenerate / 2;
-        int batch2 = patientsToGenerate - batch1;
+    static void ShowAsciiArt()
+    {
+        Console.WriteLine(@"______  ___ _____ _____ _____ _   _ _____   _____ _____ _   _  _____  _____ _      _____ ");
+        Console.WriteLine(@"| ___ \/ _ \_   _|_   _|  ___| \ | |_   _| /  __ \  _  | \ | |/  ___||  _  | |    |  ___|");
+        Console.WriteLine(@"| |_/ / /_\ \| |   | | | |__ |  \| | | |   | /  \/ | | |  \| |\ `--. | | | | |    | |__  ");
+        Console.WriteLine(@"|  __/|  _  || |   | | |  __|| . ` | | |   | |   | | | | . ` | `--. \| | | | |    |  __| ");
+        Console.WriteLine(@"| |   | | | || |  _| |_| |___| |\  | | |   | \__/\ \_/ / |\  |/\__/ /\ \_/ / |____| |___ ");
+        Console.WriteLine(@"\_|   \_| |_/\_/  \___/\____/\_| \_/ \_/    \____/\___/\_| \_/\____/  \___/\_____/\____/ ");
+        Console.WriteLine();
+        Console.WriteLine(@"                    _               __   _____  _____ ");
+        Console.WriteLine(@"                   (_)             /  | |  _  ||  _  |");
+        Console.WriteLine(@"__   _____ _ __ ___ _  ___  _ __   `| | | |/' || |/' |");
+        Console.WriteLine(@"\ \ / / _ \ '__/ __| |/ _ \| '_ \   | | |  /| ||  /| |");
+        Console.WriteLine(@" \ V /  __/ |  \__ \ | (_) | | | | _| |_\ |_/ /\ |_/ /");
+        Console.WriteLine(@"  \_/ \___|_|  |___/_|\___/|_| |_| \___(_)___(_)\___/ ");
+        Console.WriteLine();
+    }
 
-        Console.WriteLine($"\nGenerating {patientsToGenerate} patients in 2 threads...\n");
+    static void ShowMainMenu()
+    {
+        Console.Clear();
+        Console.WriteLine("=========================================");
+        Console.WriteLine("         PATIENT CONSOLE GENERATOR      ");
+        Console.WriteLine("=========================================");
+        Console.WriteLine();
+        Console.WriteLine("Текущие настройки:");
+        Console.WriteLine($"  API URL: {_baseUrl}");
+        Console.WriteLine($"  Статус API: {(_apiAvailable ? "Доступен" : "Недоступен")}");
+        Console.WriteLine();
+        Console.WriteLine("ГЛАВНОЕ МЕНЮ:");
+        Console.WriteLine("-----------------------------------------");
+        Console.WriteLine("1. Заполнить базу данных автоматически (до 100 записей)");
+        Console.WriteLine("2. Заполнить базу данных из файла (patientList.json)");
+        Console.WriteLine("3. Заполнить базу данных вручную");
+        Console.WriteLine("4. Показать текущее количество записей");
+        Console.WriteLine("5. Проверить подключение к API");
+        Console.WriteLine("0. Выход");
+        Console.WriteLine("-----------------------------------------");
+        Console.Write("Ваш выбор: ");
+    }
 
-        var startTime = DateTime.Now;
-
-        // Создаем задачи для двух потоков
-        var task1 = GenerateBatch(1, batch1);
-        var task2 = GenerateBatch(batch1 + 1, patientsToGenerate);
-
-        await Task.WhenAll(task1, task2);
-
-        var elapsed = DateTime.Now - startTime;
-
-        // Финальная проверка количества
-        int finalCount = await GetCurrentPatientCount();
-
-        Console.WriteLine("\n===================================");
-        Console.WriteLine($"Generation completed in {elapsed.TotalSeconds:F1}s");
-        Console.WriteLine($"Successful: {_successCount}");
-        Console.WriteLine($"Failed: {_failCount}");
-        Console.WriteLine($"Total attempted: {_successCount + _failCount}");
-        Console.WriteLine($"Final patient count: {finalCount}/100");
-
-        if (finalCount >= 100)
+    static async Task SetupApiConnection()
+    {
+        Console.Write("Введите URL API (по умолчанию http://localhost:5000): ");
+        string? input = Console.ReadLine();
+        if (!string.IsNullOrWhiteSpace(input))
         {
-            Console.WriteLine("\n Target of 100 patients reached!");
+
+            _baseUrl = input;
         }
         else
         {
-            Console.WriteLine($"\n Target not reached. {100 - finalCount} more patients needed.");
+            Console.WriteLine("URL по умолчанию");
         }
-        Console.WriteLine("  ___  ___________ _____   _____  _____  _____   ____ \r\n / _ \\|  __ \\  _  \\_   _| / __  \\|  _  |/ __  \\ / ___|\r\n/ /_\\ \\ |  \\/ | | | | |   `' / /'| |/' |`' / /'/ /___ \r\n|  _  | | __| | | | | |     / /  |  /| |  / /  | ___ \\\r\n| | | | |_\\ \\ |/ /  | |   ./ /___\\ |_/ /./ /___| \\_/ |\r\n\\_| |_/\\____/___/   \\_/   \\_____/ \\___/ \\_____/\\_____/\r\n                                                      \r\n                                                      \r\n");
 
-        Console.WriteLine("\nPress any key to exit...");
-        Console.ReadKey();
+        client.BaseAddress = new Uri(_baseUrl);
+
+        _apiAvailable = await TestConnection();
     }
+
+    static async Task<bool> TestConnection()
+    {
+        try
+        {
+            Console.Write("Проверка подключения к API... ");
+            var response = await client.GetAsync("/api/patients/info");
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine("✓ Успешно");
+                return true;
+            }
+            else
+            {
+                Console.WriteLine($"✗ Ошибка: {response.StatusCode}");
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"✗ Ошибка: {ex.Message}");
+            return false;
+        }
+    }
+
+    static async Task ShowCurrentCount()
+    {
+        int currentCount = await GetCurrentPatientCount();
+        if (currentCount >= 0)
+        {
+            Console.WriteLine($"\nТекущее количество пациентов в базе: {currentCount}/100");
+            Console.WriteLine($"Осталось свободных мест: {100 - currentCount}");
+        }
+        else
+        {
+            Console.WriteLine("\nНе удалось получить количество пациентов.");
+        }
+    }
+
+    #endregion
+
+    #region Core Methods
 
     static async Task<int> GetCurrentPatientCount()
     {
@@ -119,9 +207,319 @@ class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error getting count: {ex.Message}");
+            Console.WriteLine($"Ошибка при получении количества: {ex.Message}");
             return -1;
         }
+    }
+
+    static async Task AutoFillDatabase()
+    {
+        Console.Clear();
+        Console.WriteLine("=== АВТОМАТИЧЕСКОЕ ЗАПОЛНЕНИЕ БАЗЫ ДАННЫХ ===");
+        Console.WriteLine();
+
+        int currentCount = await GetCurrentPatientCount();
+
+        if (currentCount == -1)
+        {
+            Console.WriteLine("Не удалось подключиться к API. Проверьте соединение.");
+            return;
+        }
+
+        Console.WriteLine($"Текущее количество пациентов: {currentCount}/100");
+
+        if (currentCount >= 100)
+        {
+            Console.WriteLine("\n❌ Достигнут максимальный лимит в 100 пациентов!");
+            Console.WriteLine("Невозможно добавить больше записей.");
+            return;
+        }
+
+        int patientsToGenerate = 100 - currentCount;
+        Console.WriteLine($"Будет сгенерировано {patientsToGenerate} новых пациентов.");
+
+        Console.Write("\nЗапустить генерацию? (y/n): ");
+        if (Console.ReadLine()?.ToLower() != "y")
+        {
+            Console.WriteLine("Операция отменена.");
+            return;
+        }
+
+        // Сброс счетчиков
+        _successCount = 0;
+        _failCount = 0;
+
+        Console.WriteLine($"\nГенерация {patientsToGenerate} пациентов в 2 потоках...\n");
+
+        var startTime = DateTime.Now;
+
+        // Разбиваем на два потока
+        int batch1 = patientsToGenerate / 2;
+        int batch2 = patientsToGenerate - batch1;
+
+        var task1 = GenerateBatch(1, batch1);
+        var task2 = GenerateBatch(batch1 + 1, patientsToGenerate);
+
+        await Task.WhenAll(task1, task2);
+
+        var elapsed = DateTime.Now - startTime;
+
+        int finalCount = await GetCurrentPatientCount();
+
+        Console.WriteLine("\n=========================================");
+        Console.WriteLine($"Генерация завершена за {elapsed.TotalSeconds:F1} сек");
+        Console.WriteLine($"Успешно: {_successCount}");
+        Console.WriteLine($"Ошибок: {_failCount}");
+        Console.WriteLine($"Всего попыток: {_successCount + _failCount}");
+        Console.WriteLine($"Финальное количество: {finalCount}/100");
+        Console.WriteLine("=========================================");
+
+        if (finalCount >= 100)
+        {
+            Console.WriteLine("\n✅ Цель достигнута! База данных заполнена до 100 записей.");
+        }
+    }
+
+    static async Task FillFromFile()
+    {
+        Console.Clear();
+        Console.WriteLine("=== ЗАПОЛНЕНИЕ ИЗ ФАЙЛА patientList.json ===");
+        Console.WriteLine();
+
+        string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "patientList.json");
+
+        if (!File.Exists(filePath))
+        {
+            Console.WriteLine($"❌ Файл {filePath} не найден!");
+            Console.WriteLine("Создайте файл patientList.json в корневой папке приложения.");
+
+            // Создаем пример файла
+            CreateExampleFile(filePath);
+            return;
+        }
+
+        try
+        {
+            string jsonContent = File.ReadAllText(filePath);
+            var patients = JsonSerializer.Deserialize<List<object>>(jsonContent);
+
+            if (patients == null || patients.Count == 0)
+            {
+                Console.WriteLine("❌ Файл не содержит данных или имеет неверный формат.");
+                return;
+            }
+
+            Console.WriteLine($"Найдено {patients.Count} записей в файле.");
+
+            int currentCount = await GetCurrentPatientCount();
+            if (currentCount == -1)
+            {
+                Console.WriteLine("Не удалось подключиться к API.");
+                return;
+            }
+
+            int availableSlots = 100 - currentCount;
+            if (availableSlots <= 0)
+            {
+                Console.WriteLine("❌ База данных уже содержит 100 записей.");
+                return;
+            }
+
+            int toAdd = Math.Min(patients.Count, availableSlots);
+            Console.WriteLine($"Будет добавлено {toAdd} записей (доступно мест: {availableSlots})");
+
+            Console.Write("\nПродолжить? (y/n): ");
+            if (Console.ReadLine()?.ToLower() != "y")
+            {
+                Console.WriteLine("Операция отменена.");
+                return;
+            }
+
+            _successCount = 0;
+            _failCount = 0;
+
+            Console.WriteLine($"\nДобавление пациентов из файла...\n");
+
+            for (int i = 0; i < toAdd; i++)
+            {
+                var patient = patients[i];
+
+                // Проверка лимита перед каждым запросом
+                currentCount = await GetCurrentPatientCount();
+                if (currentCount >= 100)
+                {
+                    Console.WriteLine($"Достигнут лимит в 100 записей. Остановлено на {i} записи.");
+                    break;
+                }
+
+                try
+                {
+                    var response = await client.PostAsJsonAsync("/api/patients", patient);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        _successCount++;
+                        Console.WriteLine($"[{i + 1}/{toAdd}] ✓ Пациент добавлен");
+                    }
+                    else
+                    {
+                        _failCount++;
+                        var error = await response.Content.ReadAsStringAsync();
+                        Console.WriteLine($"[{i + 1}/{toAdd}] ✗ Ошибка: {response.StatusCode}");
+                    }
+
+                    await Task.Delay(50);
+                }
+                catch (Exception ex)
+                {
+                    _failCount++;
+                    Console.WriteLine($"[{i + 1}/{toAdd}] ✗ Исключение: {ex.Message}");
+                }
+            }
+
+            int finalCount = await GetCurrentPatientCount();
+            Console.WriteLine($"\n✅ Добавлено: {_successCount}, Ошибок: {_failCount}");
+            Console.WriteLine($"Текущее количество записей: {finalCount}/100");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Ошибка при чтении файла: {ex.Message}");
+        }
+    }
+
+    static async Task ManualFill()
+    {
+        Console.Clear();
+        Console.WriteLine("=== РУЧНОЕ ЗАПОЛНЕНИЕ БАЗЫ ДАННЫХ ===");
+        Console.WriteLine("(Через каждые 5 пациентов будет предложено автоматическое заполнение)");
+        Console.WriteLine();
+
+        int currentCount = await GetCurrentPatientCount();
+        if (currentCount == -1)
+        {
+            Console.WriteLine("Не удалось подключиться к API.");
+            return;
+        }
+
+        int added = 0;
+        int manualCount = 0;
+
+        while (currentCount < 100)
+        {
+            Console.Clear();
+            Console.WriteLine($"=== РУЧНОЕ ЗАПОЛНЕНИЕ (добавлено: {added}) ===");
+            Console.WriteLine($"Текущее количество записей: {currentCount}/100");
+            Console.WriteLine($"Осталось мест: {100 - currentCount}");
+            Console.WriteLine();
+
+            // Через каждые 5 добавленных пациентов предлагаем авто-заполнение
+            if (added > 0 && added % 5 == 0)
+            {
+                Console.WriteLine("🎯 Вы добавили 5 пациентов вручную!");
+                Console.Write("Хотите заполнить оставшиеся места автоматически? (y/n): ");
+
+                if (Console.ReadLine()?.ToLower() == "y")
+                {
+                    int remaining = 100 - currentCount;
+                    Console.WriteLine($"Будет автоматически добавлено {remaining} пациентов.");
+
+                    _successCount = 0;
+                    _failCount = 0;
+
+                    int batch1 = remaining / 2;
+                    int batch2 = remaining - batch1;
+
+                    var task1 = GenerateBatch(1, batch1);
+                    var task2 = GenerateBatch(batch1 + 1, remaining);
+
+                    await Task.WhenAll(task1, task2);
+
+                    added += _successCount;
+                    Console.WriteLine($"\n✅ Автоматически добавлено: {_successCount}");
+                    break;
+                }
+            }
+
+            // Создание нового пациента вручную
+            var patient = CreateManualPatient();
+
+            try
+            {
+                var response = await client.PostAsJsonAsync("/api/patients", patient);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    added++;
+                    Console.WriteLine($"\n✅ Пациент успешно добавлен!");
+                }
+                else
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"\n❌ Ошибка: {response.StatusCode}");
+                    Console.WriteLine($"Детали: {error}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\n❌ Исключение: {ex.Message}");
+            }
+
+            currentCount = await GetCurrentPatientCount();
+
+            if (currentCount < 100)
+            {
+                Console.WriteLine("\nНажмите любую клавишу для продолжения или 'q' для выхода...");
+                if (Console.ReadKey().KeyChar == 'q')
+                    break;
+            }
+        }
+
+        Console.WriteLine($"\n✅ Ручное заполнение завершено. Всего добавлено: {added}");
+    }
+
+    static object CreateManualPatient()
+    {
+        Console.WriteLine("\n--- Ввод данных пациента ---");
+
+        Console.Write("Фамилия (family): ");
+        string family = Console.ReadLine() ?? "Иванов";
+
+        Console.Write("Имя (given1): ");
+        string given1 = Console.ReadLine() ?? "Иван";
+
+        Console.Write("Отчество (given2): ");
+        string given2 = Console.ReadLine() ?? "Иванович";
+
+        Console.Write("Пол (male/female/other/unknown): ");
+        string gender = Console.ReadLine()?.ToLower() ?? "male";
+
+        Console.Write("Дата рождения (ГГГГ-ММ-ДД): ");
+        if (!DateTime.TryParse(Console.ReadLine(), out DateTime birthDate))
+        {
+            birthDate = GenerateRandomBirthDate();
+            Console.WriteLine($"Использована случайная дата: {birthDate:yyyy-MM-dd}");
+        }
+
+        Console.Write("Активен (true/false): ");
+        if (!bool.TryParse(Console.ReadLine(), out bool active))
+        {
+            active = random.Next(2) == 1;
+            Console.WriteLine($"Использовано значение: {active}");
+        }
+
+        return new
+        {
+            name = new
+            {
+                id = Guid.NewGuid(),
+                use = "official",
+                family = family,
+                given = new[] { given1, given2 }
+            },
+            gender = gender,
+            birthDate = birthDate.ToString("yyyy-MM-ddTHH:mm:ss"),
+            active = active
+        };
     }
 
     static async Task GenerateBatch(int start, int count)
@@ -132,11 +530,10 @@ class Program
         {
             try
             {
-                // Перед каждым запросом проверяем, не достигли ли мы лимита
                 var currentCount = await GetCurrentPatientCount();
                 if (currentCount >= 100)
                 {
-                    Console.WriteLine($"[{Thread.CurrentThread.ManagedThreadId}] Stopping: 100 patients limit reached");
+                    Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ⏹️ Достигнут лимит в 100 пациентов");
                     break;
                 }
 
@@ -146,26 +543,26 @@ class Program
                 if (response.IsSuccessStatusCode)
                 {
                     Interlocked.Increment(ref _successCount);
-                    Console.WriteLine($"[{Thread.CurrentThread.ManagedThreadId}] Patient {i} created (total: {_successCount + _failCount})");
+                    Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ✓ Пациент {i} создан (всего: {_successCount + _failCount})");
                 }
                 else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
                 {
                     var error = await response.Content.ReadAsStringAsync();
                     if (error.Contains("Maximum patients limit reached"))
                     {
-                        Console.WriteLine($"[{Thread.CurrentThread.ManagedThreadId}] {error}");
+                        Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ⏹️ {error}");
                         break;
                     }
                     else
                     {
                         Interlocked.Increment(ref _failCount);
-                        Console.WriteLine($"[{Thread.CurrentThread.ManagedThreadId}] Patient {i} failed: {response.StatusCode}");
+                        Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ✗ Пациент {i} ошибка: {response.StatusCode}");
                     }
                 }
                 else
                 {
                     Interlocked.Increment(ref _failCount);
-                    Console.WriteLine($"[{Thread.CurrentThread.ManagedThreadId}] Patient {i} failed: {response.StatusCode}");
+                    Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ✗ Пациент {i} ошибка: {response.StatusCode}");
                 }
 
                 await Task.Delay(50);
@@ -173,7 +570,7 @@ class Program
             catch (Exception ex)
             {
                 Interlocked.Increment(ref _failCount);
-                Console.WriteLine($"[{Thread.CurrentThread.ManagedThreadId}] Patient {i} error: {ex.Message}");
+                Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ✗ Пациент {i} исключение: {ex.Message}");
             }
         }
     }
@@ -182,19 +579,16 @@ class Program
     {
         lock (_lockObject)
         {
-            // Сначала выбираем пол
             var gender = genders[random.Next(genders.Length)];
 
             string firstName;
             string patronymic;
             string lastName;
 
-            // В зависимости от пола выбираем соответствующие имена
             if (gender == "male")
             {
                 firstName = maleFirstNames[random.Next(maleFirstNames.Length)];
                 patronymic = malePatronymics[random.Next(malePatronymics.Length)];
-                // Для мужчин выбираем фамилию мужского рода
                 lastName = lastNames.Where(l => l.EndsWith("ов") || l.EndsWith("ев") || l.EndsWith("ин") || l.EndsWith("ын"))
                                    .OrderBy(x => random.Next()).FirstOrDefault() ?? "Иванов";
             }
@@ -202,13 +596,11 @@ class Program
             {
                 firstName = femaleFirstNames[random.Next(femaleFirstNames.Length)];
                 patronymic = femalePatronymics[random.Next(femalePatronymics.Length)];
-                // Для женщин выбираем фамилию женского рода
                 lastName = lastNames.Where(l => l.EndsWith("ова") || l.EndsWith("ева") || l.EndsWith("ина") || l.EndsWith("ына"))
                                    .OrderBy(x => random.Next()).FirstOrDefault() ?? "Иванова";
             }
             else
             {
-                // Для other и unknown - случайный выбор
                 var useMale = random.Next(2) == 0;
                 if (useMale)
                 {
@@ -244,14 +636,66 @@ class Program
     {
         lock (_lockObject)
         {
-            // Генерируем дату рождения от 0 до 80 лет назад
             var start = DateTime.UtcNow.AddYears(-80);
-            var range = DateTime.UtcNow.AddYears(-18) - start; // От 18 до 80 лет
+            var range = DateTime.UtcNow.AddYears(-18) - start;
             return start.AddDays(random.NextDouble() * range.TotalDays);
         }
     }
 
-    // Класс для десериализации ответа от /api/patients/count
+    static void CreateExampleFile(string filePath)
+    {
+        var examplePatients = new[]
+        {
+            new
+            {
+                name = new
+                {
+                    id = Guid.NewGuid(),
+                    use = "official",
+                    family = "Иванов",
+                    given = new[] { "Иван", "Иванович" }
+                },
+                gender = "male",
+                birthDate = "2024-01-13T18:25:43",
+                active = true
+            },
+            new
+            {
+                name = new
+                {
+                    id = Guid.NewGuid(),
+                    use = "official",
+                    family = "Петрова",
+                    given = new[] { "Анна", "Сергеевна" }
+                },
+                gender = "female",
+                birthDate = "2023-05-20T10:30:00",
+                active = true
+            },
+            new
+            {
+                name = new
+                {
+                    id = Guid.NewGuid(),
+                    use = "official",
+                    family = "Сидоров",
+                    given = new[] { "Петр", "Алексеевич" }
+                },
+                gender = "male",
+                birthDate = "2022-11-08T15:45:00",
+                active = false
+            }
+        };
+
+        string json = JsonSerializer.Serialize(examplePatients, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(filePath, json);
+
+        Console.WriteLine($"✅ Создан пример файла: {filePath}");
+        Console.WriteLine("Вы можете отредактировать его и добавить своих пациентов.");
+    }
+
+    #endregion
+
     class CountResponse
     {
         public int totalCount { get; set; }

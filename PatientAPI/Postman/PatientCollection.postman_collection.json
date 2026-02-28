@@ -1,10 +1,10 @@
 {
   "info": {
-    "_postman_id": "368865e9-2e57-4e78-b4cf-2a371e4328e7",
+    "_postman_id": "333e8ed2-1802-49cb-8ace-23e39acdf357",
     "name": "PatientCollection",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "20458911",
-    "_collection_link": "https://go.postman.co/collection/20458911-368865e9-2e57-4e78-b4cf-2a371e4328e7?source=collection_link"
+    "_collection_link": "https://go.postman.co/collection/20458911-333e8ed2-1802-49cb-8ace-23e39acdf357?source=collection_link"
   },
   "item": [
     {
@@ -22,6 +22,27 @@
           "path": [
             "api",
             "Patients"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Info",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/Patients/info",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "5000",
+          "path": [
+            "api",
+            "Patients",
+            "info"
           ]
         }
       },

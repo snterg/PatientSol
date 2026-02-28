@@ -7,16 +7,21 @@ services:
     container_name: patient_db
     environment:
       ACCEPT_EULA: "Y"
-      SA_PASSWORD: "6d:dyW[=(ZFFc£2*Kg04HB_-"
+      SA_PASSWORD: "y339x3merqyw8xgl0lrm1dyvfhez3cf!"
       MSSQL_PID: "Express"
+      # Настройка временной зоны для SQL Server (GMT+3 / Москва)
+      TZ: "Europe/Moscow"
     ports:
-      - "1433:1433"  # Проброс порта для внешнего доступа (опционально)
+      - "1433:1433"
     volumes:
-      - sql_data:/var/opt/mssql  # Сохраняем данные БД между перезапусками
+      - sql_data:/var/opt/mssql
+      # Монтируем файл времени для корректной настройки (для Linux)
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     networks:
       - patient_network
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "6d:dyW[=(ZFFc£2*Kg04HB_-", "-Q", "SELECT 1", "-C"]
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "y339x3merqyw8xgl0lrm1dyvfhez3cf!", "-Q", "SELECT 1", "-C"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -29,15 +34,23 @@ services:
       dockerfile: Dockerfile
     container_name: patient_api
     ports:
-      - "5000:80"  # Проброс порта: локальный 5000 -> контейнер 80
-      - "5001:443" # Для HTTPS (если нужно)
+      - "5000:80"
+      - "5001:443"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:80  # Только HTTP для простоты
-      - ConnectionStrings__DefaultConnection=Server=db;Database=PatientDb;User Id=sa;Password=6d:dyW[=(ZFFc£2*Kg04HB_-;TrustServerCertificate=True;
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Server=db;Database=PatientDb;User Id=sa;Password=y339x3merqyw8xgl0lrm1dyvfhez3cf!;TrustServerCertificate=True;
+      # Настройка временной зоны для API контейнера (GMT+3)
+      - TZ=Europe/Moscow
+      # Альтернативный способ для .NET (переопределение временной зоны)
+      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+    volumes:
+      # Монтируем файлы времени для корректной настройки
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
       db:
-        condition: service_healthy  # Ждем, пока БД будет готова
+        condition: service_healthy
     networks:
       - patient_network
 
