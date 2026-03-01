@@ -89,22 +89,19 @@ CREATE TABLE PatientInfos (
 )
 ```
 
-erDiagram
-    Patient ||--|| PatientInfo : has
-    Patient {
-        guid Id PK "Внутренний ID (не отображается)"
-        guid PatientInfoId FK "Внешний ключ"
-        string Gender "male/female/other/unknown"
-        datetime BirthDate "Обязательное поле"
-        bool Active "true/false"
-    }
-    
-    PatientInfo {
-        guid Id PK "Публичный ID (отображается в API)"
-        string Use "official и др."
-        string Family "Фамилия (обязательное поле)"
-        string Given "JSON массив [имя, отчество]"
-    }
+┌─────────────────┐       ┌─────────────────┐
+│    Patients     │       │   PatientInfos  │
+├─────────────────┤       ├─────────────────┤
+│ Id (PK)         │───────│ Id (PK)         │
+│ PatientInfoId   │  1   1│ Use             │
+│ Gender          │  ═══  │ Family          │
+│ BirthDate       │       │ Given (JSON)    │
+│ Active          │       │                 │
+└─────────────────┘       └─────────────────┘
+      ▲                           ▲
+      │                           │
+      └────────── one-to-one ─────┘
+           (каскадное удаление)
 
 ### Связи:
 - **One-to-One**: Каждый пациент имеет одну запись с именем (каскадное удаление)
