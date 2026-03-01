@@ -23,7 +23,7 @@ public class PatientInfo
     /// <summary>
     /// Фамилия пациента (обязательное поле)
     /// </summary>
-    [Required(ErrorMessage = "Фамилия обязательна!")]
+    [Required(ErrorMessage = "Фамилия обязательна!!!")]
     [MaxLength(100)]
     public string Family { get; set; } = string.Empty;
 

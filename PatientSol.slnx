@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="PatientAPI.Tests/PatientAPI.Tests.csproj" Id="bc6c153c-63be-4188-8952-ffc7e2db66d2" />
   <Project Path="PatientAPI/PatientAPI.csproj" />
-  <Project Path="PatientConsoleWithoutDocker/PatientConsoleWithoutDocker.csproj" Id="abc8faba-14e7-47f5-86f5-924daca6d7e6" />
+  <Project Path="PatientConsoleApplication/PatientConsoleApplication.csproj" Id="abc8faba-14e7-47f5-86f5-924daca6d7e6" />
 </Solution>

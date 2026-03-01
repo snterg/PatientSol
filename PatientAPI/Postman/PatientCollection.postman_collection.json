@@ -1,19 +1,18 @@
 {
   "info": {
     "_postman_id": "333e8ed2-1802-49cb-8ace-23e39acdf357",
-    "name": "PatientCollection",
+    "name": "Patient API Collection",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "20458911",
-    "_collection_link": "https://go.postman.co/collection/20458911-333e8ed2-1802-49cb-8ace-23e39acdf357?source=collection_link"
+    "_exporter_id": "20458911"
   },
   "item": [
     {
-      "name": "GetAll",
+      "name": "1. Получение всех пациентов (с пагинацией)",
       "request": {
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "http://localhost:5000/api/Patients",
+          "raw": "http://localhost:5000/api/Patients?limit=10&offset=0",
           "protocol": "http",
           "host": [
             "localhost"
@@ -22,13 +21,25 @@
           "path": [
             "api",
             "Patients"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10",
+              "description": "Количество записей (по умолчанию 100, макс 1000)"
+            },
+            {
+              "key": "offset",
+              "value": "0",
+              "description": "Смещение для пагинации"
+            }
           ]
         }
       },
       "response": []
     },
     {
-      "name": "Info",
+      "name": "2. Получение информации об API",
       "request": {
         "method": "GET",
         "header": [],
@@ -49,7 +60,7 @@
       "response": []
     },
     {
-      "name": "GetById",
+      "name": "3. Получение пациента по ID",
       "request": {
         "method": "GET",
         "header": [],
@@ -70,10 +81,15 @@
       "response": []
     },
     {
-      "name": "Add",
+      "name": "4. Создание нового пациента",
       "request": {
         "method": "POST",
-        "header": [],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\r\n  \"name\": {\r\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\r\n    \"use\": \"official\",\r\n    \"family\": \"Иванов\",\r\n    \"given\": [\r\n      \"Иван\",\r\n      \"Иванович\"\r\n    ]\r\n  },\r\n  \"gender\": \"male\",\r\n  \"birthDate\": \"2024-01-13T18:25:43\",\r\n  \"active\": true\r\n}",
@@ -99,10 +115,15 @@
       "response": []
     },
     {
-      "name": "Update",
+      "name": "5. Обновление пациента",
       "request": {
         "method": "PUT",
-        "header": [],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\r\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\r\n  \"name\": {\r\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\r\n    \"use\": \"official\",\r\n    \"family\": \"Петров\",\r\n    \"given\": [\r\n      \"Петр\",\r\n      \"Петрович\"\r\n    ]\r\n  },\r\n  \"gender\": \"male\",\r\n  \"birthDate\": \"2023-05-20T10:30:00\",\r\n  \"active\": false\r\n}",
@@ -129,7 +150,7 @@
       "response": []
     },
     {
-      "name": "Delete",
+      "name": "6. Удаление пациента",
       "request": {
         "method": "DELETE",
         "header": [],
@@ -150,241 +171,282 @@
       "response": []
     },
     {
-      "name": "SearchBirthDate_eq",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:5000/api/Patients?birthDate=eq2024-01-13",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "5000",
-          "path": [
-            "api",
-            "Patients"
-          ],
-          "query": [
-            {
-              "key": "birthDate",
-              "value": "eq2024-01-13"
+      "name": "7. Поиск по дате рождения (FHIR)",
+      "item": [
+        {
+          "name": "7.1 eq (равно)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/Patients/search?birthDate=eq2024-01-13",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "Patients",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "birthDate",
+                  "value": "eq2024-01-13"
+                }
+              ]
             }
-          ]
+          },
+          "response": []
+        },
+        {
+          "name": "7.2 ne (не равно)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/Patients/search?birthDate=ne2024-01-13",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "Patients",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "birthDate",
+                  "value": "ne2024-01-13"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.3 lt (меньше)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/Patients/search?birthDate=lt2024-01-01",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "Patients",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "birthDate",
+                  "value": "lt2024-01-01"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.4 gt (больше)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/Patients/search?birthDate=gt2024-01-01",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "Patients",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "birthDate",
+                  "value": "gt2024-01-01"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.5 le (меньше или равно)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/Patients/search?birthDate=le2024-01-01",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "Patients",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "birthDate",
+                  "value": "le2024-01-01"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.6 ge (больше или равно)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/Patients/search?birthDate=ge2024-01-01",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "Patients",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "birthDate",
+                  "value": "ge2024-01-01"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.7 sa (starts after)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/Patients/search?birthDate=sa2024-01-01",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "Patients",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "birthDate",
+                  "value": "sa2024-01-01"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.8 eb (ends before)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/Patients/search?birthDate=eb2024-01-01",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "Patients",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "birthDate",
+                  "value": "eb2024-01-01"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.9 ap (approximately)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/Patients/search?birthDate=ap2024-01-13",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "Patients",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "birthDate",
+                  "value": "ap2024-01-13"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7.10 без префикса (по умолчанию eq)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/Patients/search?birthDate=2024-01-13",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "Patients",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "birthDate",
+                  "value": "2024-01-13"
+                }
+              ]
+            }
+          },
+          "response": []
         }
-      },
-      "response": []
+      ]
     },
     {
-      "name": "SearchBirthDate_ne",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:5000/api/Patients?birthDate=ne2024-01-13",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "5000",
-          "path": [
-            "api",
-            "Patients"
-          ],
-          "query": [
-            {
-              "key": "birthDate",
-              "value": "ne2024-01-13"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "SearchBirthDate_lt",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:5000/api/Patients?birthDate=lt2024-01-01",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "5000",
-          "path": [
-            "api",
-            "Patients"
-          ],
-          "query": [
-            {
-              "key": "birthDate",
-              "value": "lt2024-01-01"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "SearchBirthDate_gt",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:5000/api/Patients?birthDate=gt2024-12-31",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "5000",
-          "path": [
-            "api",
-            "Patients"
-          ],
-          "query": [
-            {
-              "key": "birthDate",
-              "value": "gt2024-12-31"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "SearchBirthDate_le",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:5000/api/Patients?birthDate=le2024-06-30",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "5000",
-          "path": [
-            "api",
-            "Patients"
-          ],
-          "query": [
-            {
-              "key": "birthDate",
-              "value": "le2024-06-30"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "SearchBirthDate_ge",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:5000/api/Patients?birthDate=ge2024-06-30",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "5000",
-          "path": [
-            "api",
-            "Patients"
-          ],
-          "query": [
-            {
-              "key": "birthDate",
-              "value": "ge2024-06-30"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "SearchBirthDate_sa",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:5000/api/Patients?birthDate=sa2024-01-01",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "5000",
-          "path": [
-            "api",
-            "Patients"
-          ],
-          "query": [
-            {
-              "key": "birthDate",
-              "value": "sa2024-01-01"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "SearchBirthDate_eb",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:5000/api/Patients?birthDate=eb2024-12-31",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "5000",
-          "path": [
-            "api",
-            "Patients"
-          ],
-          "query": [
-            {
-              "key": "birthDate",
-              "value": "eb2024-12-31"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "SearchBirthDate_ap",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:5000/api/Patients?birthDate=ap2024-01-13",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "5000",
-          "path": [
-            "api",
-            "Patients"
-          ],
-          "query": [
-            {
-              "key": "birthDate",
-              "value": "ap2024-01-13"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "GetCount",
+      "name": "8. Получение количества пациентов",
       "request": {
         "method": "GET",
         "header": [],
@@ -399,6 +461,54 @@
             "api",
             "Patients",
             "count"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "9. Получение количества активных пациентов",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/Patients/count?active=true",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "5000",
+          "path": [
+            "api",
+            "Patients",
+            "count"
+          ],
+          "query": [
+            {
+              "key": "active",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "10. Переключение статуса активности (PATCH)",
+      "request": {
+        "method": "PATCH",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/Patients/3fa85f64-5717-4562-b3fc-2c963f66afa6",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "5000",
+          "path": [
+            "api",
+            "Patients",
+            "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           ]
         }
       },

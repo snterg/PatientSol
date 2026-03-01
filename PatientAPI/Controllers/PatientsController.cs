@@ -73,74 +73,97 @@ public class PatientsController : ControllerBase
         _logger = logger;
     }
 
-    #region GET: Получение всех пациентов с фильтрацией
+    #region GET: Получение всех пациентов с пагинацией
 
     /// <summary>
-    /// Получает список пациентов с возможностью фильтрации
+    /// Получает список всех пациентов с поддержкой пагинации
     /// </summary>
-    /// <param name="family">Фильтр по фамилии</param>
-    /// <param name="given">Фильтр по имени</param>
-    /// <param name="birthDate">Фильтр по дате рождения (FHIR формат)</param>
-    /// <param name="gender">Фильтр по полу</param>
-    /// <param name="active">Фильтр по статусу активности</param>
     /// <param name="limit">Лимит записей (по умолчанию 100)</param>
     /// <param name="offset">Смещение для пагинации</param>
     /// <returns>Список пациентов</returns>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Patient>>> GetPatients(
-        [FromQuery] string? family = null,
-        [FromQuery] string? given = null,
-        [FromQuery] string? birthDate = null,
-        [FromQuery] string? gender = null,
-        [FromQuery] bool? active = null,
         [FromQuery] int? limit = 100,
         [FromQuery] int? offset = 0)
     {
-        _logger.LogInformation("Начало получения пациентов с параметрами: Family={Family}, Given={Given}, BirthDate={BirthDate}, Gender={Gender}, Active={Active}, Limit={Limit}, Offset={Offset}",
-            family, given, birthDate, gender, active, limit, offset);
+        _logger.LogInformation("Начало получения пациентов с параметрами: Limit={Limit}, Offset={Offset}", limit, offset);
 
         try
         {
-            // Валидация входных параметров
-            if (limit.HasValue && (limit.Value < 1 || limit.Value > 1000))
+            int currentLimit = limit ?? 100;
+            int currentOffset = offset ?? 0;
+
+            // ВАЖНО: Валидация должна быть ПЕРЕД запросом к БД
+            if (currentLimit < 1 || currentLimit > 1000)
             {
-                _logger.LogWarning("Неверное значение лимита: {Limit}", limit);
+                _logger.LogWarning("Неверное значение лимита: {Limit}", currentLimit);
                 return BadRequest(new { error = "Лимит должен быть от 1 до 1000" });
             }
 
-            if (offset.HasValue && offset.Value < 0)
+            if (currentOffset < 0)
             {
-                _logger.LogWarning("Неверное значение смещения: {Offset}", offset);
+                _logger.LogWarning("Неверное значение смещения: {Offset}", currentOffset);
                 return BadRequest(new { error = "Смещение не может быть отрицательным" });
             }
 
-            // Санитизация поисковых запросов
-            if (!string.IsNullOrWhiteSpace(family) && !IsValidSearchTerm(family))
+            // Получаем общее количество пациентов
+            var totalCount = await _context.Patients.CountAsync();
+
+            // ВАЖНО: Применяем Skip и Take для пагинации
+            var patients = await _context.Patients
+                .Include(p => p.Name)
+                .OrderBy(p => p.BirthDate)
+                .Skip(currentOffset)
+                .Take(currentLimit)
+                .AsNoTracking()
+                .ToListAsync();
+
+            // ВАЖНО: Проверяем, что Response не null перед добавлением заголовков
+            if (Response != null)
             {
-                _logger.LogWarning("Недопустимые символы в фамилии: {Family}", family);
-                return BadRequest(new { error = "Фамилия содержит недопустимые символы" });
+                Response.Headers.Add("X-Total-Count", totalCount.ToString());
+                Response.Headers.Add("X-Limit", currentLimit.ToString());
+                Response.Headers.Add("X-Offset", currentOffset.ToString());
             }
 
-            if (!string.IsNullOrWhiteSpace(given) && !IsValidSearchTerm(given))
+            _logger.LogInformation("Успешно получено {Count} пациентов из {TotalCount}", patients.Count, totalCount);
+
+            return Ok(patients);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка при получении пациентов: {Message}", ex.Message);
+            return StatusCode(500, new { error = "Произошла ошибка при получении пациентов." });
+        }
+    }
+
+    #endregion
+
+    #region GET: Поиск пациентов по дате рождения (FHIR)
+
+    /// <summary>
+    /// Поиск пациентов по дате рождения в формате FHIR
+    /// </summary>
+    /// <param name="birthDate">Дата в формате FHIR (eq2024-01-13, gt2024-01-01, lt2024-12-31, ...)</param>
+    /// <returns>Список пациентов</returns>
+    [HttpGet("search")]
+    public async Task<ActionResult<IEnumerable<Patient>>> SearchByBirthDate(
+        [FromQuery] string birthDate)
+    {
+        _logger.LogInformation("Поиск пациентов по дате: {BirthDate}", birthDate);
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(birthDate))
             {
-                _logger.LogWarning("Недопустимые символы в имени: {Given}", given);
-                return BadRequest(new { error = "Имя содержит недопустимые символы" });
+                return BadRequest(new { error = "Параметр birthDate обязателен" });
             }
 
-            // Валидация пола
-            if (!string.IsNullOrWhiteSpace(gender))
+            var (prefix, date) = ParseFhirDateParameter(birthDate);
+
+            if (!date.HasValue)
             {
-                var genderLower = gender.ToLower();
-                if (!ValidGenders.Contains(genderLower))
-                {
-                    _logger.LogWarning("Неверное значение пола: {Gender}", gender);
-                    return BadRequest(new
-                    {
-                        error = "Недопустимое значение пола",
-                        message = $"Пол должен быть одним из: {string.Join(", ", ValidGenders)}",
-                        providedValue = gender
-                    });
-                }
+                return BadRequest(new { error = "Неверный формат даты. Используйте ГГГГ-ММ-ДД или FHIR формат (eq2024-01-13)" });
             }
 
             var query = _context.Patients
@@ -148,102 +171,58 @@ public class PatientsController : ControllerBase
                 .AsNoTracking()
                 .AsQueryable();
 
-            // Фильтр по фамилии
-            if (!string.IsNullOrWhiteSpace(family) && family.Length <= MaxFamilyLength)
+            _logger.LogInformation("Применяем фильтр с префиксом: {Prefix}, дата: {Date}", prefix, date.Value);
+
+            // Применяем фильтр в зависимости от префикса согласно FHIR спецификации
+            switch (prefix)
             {
-                query = query.Where(p => p.Name != null && p.Name.Family.Contains(family));
+                case "eq":
+                    query = query.Where(p => p.BirthDate.Date == date.Value.Date);
+                    break;
+                case "ne":
+                    query = query.Where(p => p.BirthDate.Date != date.Value.Date);
+                    break;
+                case "lt":
+                    query = query.Where(p => p.BirthDate.Date < date.Value.Date);
+                    break;
+                case "gt":
+                    query = query.Where(p => p.BirthDate.Date > date.Value.Date);
+                    break;
+                case "le":
+                    query = query.Where(p => p.BirthDate.Date <= date.Value.Date);
+                    break;
+                case "ge":
+                    query = query.Where(p => p.BirthDate.Date >= date.Value.Date);
+                    break;
+                case "sa":
+                    // starts after - дата рождения после указанной даты
+                    query = query.Where(p => p.BirthDate.Date > date.Value.Date);
+                    break;
+                case "eb":
+                    // ends before - дата рождения до указанной даты
+                    query = query.Where(p => p.BirthDate.Date < date.Value.Date);
+                    break;
+                case "ap":
+                    // approximately - дата в пределах +/- 1 дня
+                    query = query.Where(p =>
+                        p.BirthDate.Date >= date.Value.AddDays(-1).Date &&
+                        p.BirthDate.Date <= date.Value.AddDays(1).Date);
+                    break;
+                default:
+                    query = query.Where(p => p.BirthDate.Date == date.Value.Date);
+                    break;
             }
 
-            // Фильтр по имени
-            if (!string.IsNullOrWhiteSpace(given) && given.Length <= MaxGivenLength)
-            {
-                query = query.Where(p => p.Name != null && p.Name.Given != null &&
-                    p.Name.Given.Any(g => g != null && g.Contains(given)));
-            }
+            var patients = await query.ToListAsync();
 
-            // Фильтр по полу
-            if (!string.IsNullOrWhiteSpace(gender))
-            {
-                var genderLower = gender.ToLower();
-                query = query.Where(p => p.Gender != null && p.Gender.ToLower() == genderLower);
-            }
+            _logger.LogInformation("Найдено {Count} пациентов", patients.Count);
 
-            // Фильтр по статусу активности
-            if (active.HasValue)
-            {
-                query = query.Where(p => p.Active == active.Value);
-            }
-
-            // FHIR фильтр по дате рождения
-            if (!string.IsNullOrWhiteSpace(birthDate))
-            {
-                if (birthDate.Length > 50)
-                {
-                    _logger.LogWarning("Слишком длинный параметр даты: {Length} символов", birthDate.Length);
-                    return BadRequest(new { error = "Параметр даты слишком длинный" });
-                }
-
-                var (prefix, date) = ParseFhirDateParameter(birthDate);
-
-                if (date.HasValue)
-                {
-                    // Валидация даты
-                    if (date.Value > DateTime.UtcNow)
-                    {
-                        _logger.LogWarning("Дата рождения в будущем: {BirthDate}", date.Value);
-                        return BadRequest(new { error = "Дата рождения не может быть в будущем" });
-                    }
-
-                    if (date.Value < DateTime.UtcNow.AddYears(-150))
-                    {
-                        _logger.LogWarning("Дата рождения слишком старая: {BirthDate}", date.Value);
-                        return BadRequest(new { error = "Дата рождения слишком далеко в прошлом" });
-                    }
-
-                    query = prefix switch
-                    {
-                        "eq" => query.Where(p => p.BirthDate.Date == date.Value.Date),
-                        "ne" => query.Where(p => p.BirthDate.Date != date.Value.Date),
-                        "lt" => query.Where(p => p.BirthDate.Date < date.Value.Date),
-                        "gt" => query.Where(p => p.BirthDate.Date > date.Value.Date),
-                        "le" => query.Where(p => p.BirthDate.Date <= date.Value.Date),
-                        "ge" => query.Where(p => p.BirthDate.Date >= date.Value.Date),
-                        "sa" => query.Where(p => p.BirthDate.Date > date.Value.Date),
-                        "eb" => query.Where(p => p.BirthDate.Date < date.Value.Date),
-                        "ap" => query.Where(p =>
-                            p.BirthDate.Date >= date.Value.AddDays(-1).Date &&
-                            p.BirthDate.Date <= date.Value.AddDays(1).Date),
-                        _ => query.Where(p => p.BirthDate.Date == date.Value.Date)
-                    };
-
-                    _logger.LogDebug("Применен FHIR фильтр: {Prefix} {Date}", prefix, date.Value);
-                }
-                else
-                {
-                    _logger.LogWarning("Неверный формат даты: {BirthDate}", birthDate);
-                    return BadRequest(new { error = "Неверный формат даты. Используйте ГГГГ-ММ-ДД или FHIR формат (eq2024-01-13)" });
-                }
-            }
-
-            // Пагинация
-            var totalCount = await query.CountAsync();
-            var result = await query
-                .Skip(offset.Value)
-                .Take(limit.Value)
-                .ToListAsync();
-
-            // Добавление заголовков пагинации
-            Response.Headers.Add("X-Total-Count", totalCount.ToString());
-            Response.Headers.Add("X-Limit", limit.Value.ToString());
-            Response.Headers.Add("X-Offset", offset.Value.ToString());
-
-            _logger.LogInformation("Успешно получено {Count} пациентов из {TotalCount}", result.Count, totalCount);
-            return Ok(result);
+            return Ok(patients);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка при получении пациентов");
-            return StatusCode(500, new { error = "Произошла ошибка при получении пациентов." });
+            _logger.LogError(ex, "Ошибка при поиске пациентов");
+            return StatusCode(500, new { error = "Произошла ошибка при поиске пациентов." });
         }
     }
 
@@ -274,12 +253,13 @@ public class PatientsController : ControllerBase
             var patient = await _context.Patients
                 .Include(p => p.Name)
                 .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Name.Id == id);
+                .FirstOrDefaultAsync(p => p.Name != null && p.Name.Id == id);
 
             if (patient == null)
             {
                 _logger.LogWarning("Пациент с ID {Id} не найден", id);
-                return NotFound($"Пациент с ID {id} не найден.");
+                // Возвращаем JSON объект вместо строки
+                return NotFound(new { error = $"Пациент с ID {id} не найден." });
             }
 
             _logger.LogInformation("Пациент с ID {Id} успешно получен", id);
@@ -493,9 +473,9 @@ public class PatientsController : ControllerBase
                     .LoadAsync();
             }
 
-            _logger.LogInformation("Пациент успешно создан с ID {Id}, активен: {Active}", patient.Name.Id, patient.Active);
+            _logger.LogInformation("Пациент успешно создан с ID {Id}, активен: {Active}", patient.Name?.Id, patient.Active);
 
-            return CreatedAtAction(nameof(GetPatient), new { id = patient.Name.Id }, patient);
+            return CreatedAtAction(nameof(GetPatient), new { id = patient.Name?.Id }, patient);
         }
         catch (DbUpdateException ex)
         {
@@ -527,7 +507,18 @@ public class PatientsController : ControllerBase
 
         try
         {
+            // Проверка на null
+            if (patient == null)
+            {
+                return BadRequest(new { error = "Данные пациента обязательны" });
+            }
+
             // Проверка соответствия ID
+            if (patient.Name == null)
+            {
+                return BadRequest(new { error = "Информация об имени обязательна" });
+            }
+
             if (id != patient.Name.Id)
             {
                 _logger.LogWarning("Несоответствие ID в URL ({UrlId}) и теле запроса ({BodyId})", id, patient.Name.Id);
@@ -600,12 +591,12 @@ public class PatientsController : ControllerBase
 
             var existingPatient = await _context.Patients
                 .Include(p => p.Name)
-                .FirstOrDefaultAsync(p => p.Name.Id == id);
+                .FirstOrDefaultAsync(p => p.Name != null && p.Name.Id == id);
 
             if (existingPatient == null)
             {
                 _logger.LogWarning("Пациент с ID {Id} не найден для обновления", id);
-                return NotFound($"Пациент с ID {id} не найден.");
+                return NotFound(new { error = $"Пациент с ID {id} не найден." });
             }
 
             // Обновление полей
@@ -661,12 +652,13 @@ public class PatientsController : ControllerBase
             }
 
             var patient = await _context.Patients
-                .FirstOrDefaultAsync(p => p.Name.Id == id);
+                .Include(p => p.Name)
+                .FirstOrDefaultAsync(p => p.Name != null && p.Name.Id == id);
 
             if (patient == null)
             {
                 _logger.LogWarning("Пациент с ID {Id} не найден для переключения статуса", id);
-                return NotFound($"Пациент с ID {id} не найден.");
+                return NotFound(new { error = $"Пациент с ID {id} не найден." });
             }
 
             var oldStatus = patient.Active;
@@ -677,7 +669,7 @@ public class PatientsController : ControllerBase
             _logger.LogInformation("Статус активности пациента с ID {Id} переключен. Старый статус: {OldStatus}, новый статус: {NewStatus}",
                 id, oldStatus, patient.Active);
 
-            return Ok(new { id = patient.Name.Id, active = patient.Active });
+            return Ok(new { id = patient.Name?.Id, active = patient.Active });
         }
         catch (Exception ex)
         {
@@ -710,12 +702,12 @@ public class PatientsController : ControllerBase
 
             var patient = await _context.Patients
                 .Include(p => p.Name)
-                .FirstOrDefaultAsync(p => p.Name.Id == id);
+                .FirstOrDefaultAsync(p => p.Name != null && p.Name.Id == id);
 
             if (patient == null)
             {
                 _logger.LogWarning("Пациент с ID {Id} не найден для удаления", id);
-                return NotFound($"Пациент с ID {id} не найден.");
+                return NotFound(new { error = $"Пациент с ID {id} не найден." });
             }
 
             _context.Patients.Remove(patient);

@@ -2,7 +2,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace PatientConsoleWithoutDocker;
+namespace PatientConsoleApplication;
 
 class Program
 {

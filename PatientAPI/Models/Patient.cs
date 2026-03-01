@@ -18,7 +18,7 @@ public class Patient
     /// <summary>
     /// Подробная информация о пациенте (обязательное поле)
     /// </summary>
-    [Required(ErrorMessage = "Информация обязательна!")]
+    [Required(ErrorMessage = "Информация обязательна!!!")]
     public PatientInfo Name { get; set; } = null!;
 
     /// <summary>
@@ -30,7 +30,7 @@ public class Patient
     /// <summary>
     /// Дата рождения (обязательное поле)
     /// </summary>
-    [Required(ErrorMessage = "Дата рождения обязательна!")]
+    [Required(ErrorMessage = "Дата рождения обязательна!!!")]
     public DateTime BirthDate { get; set; }
 
     /// <summary>

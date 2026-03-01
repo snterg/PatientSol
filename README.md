@@ -1,23 +1,26 @@
-# Patient Sol
+
+# Patient Solution
 
 ## Описание проекта
 
-**Patient Sol** - это RESTful веб-сервис для управления данными пациентов (рожденные в роддоме дети) и консольное приложение для демонстрации работы API. Проект разработан на ASP.NET Core 6 с использованием Entity Framework Core и запускается в Docker-контейнерах (API и база данных).
+**Patient Solution** - это RESTful веб-сервис для управления данными пациентов (рожденные в роддоме дети) и консольное приложение для демонстрации работы API. Проект разработан на ASP.NET Core 6 с использованием Entity Framework Core и запускается в Docker-контейнерах (API и база данных).
 
 ### Основные возможности:
 - CRUD операции для сущности Patient
-- Поиск пациентов по дате рождения с поддержкой FHIR-формата
-- Валидация данных по справочникам
+- Поиск пациентов по дате рождения с поддержкой FHIR-формата (9 операторов: eq, ne, lt, gt, le, ge, sa, eb, ap)
+- Валидация данных по справочникам (Gender, Active)
+- Пагинация с заголовками X-Total-Count, X-Limit, X-Offset
 - Консольный генератор для создания 100 тестовых пациентов
 - Docker-контейнеризация (API + SQL Server)
 - Swagger документация
 - Postman коллекция для тестирования
+- Unit-тесты с использованием NUnit и InMemory Database
 
 ---
 
 ## Структура проекта
 
-Проект состоит из двух основных частей:
+Проект состоит из трех основных частей:
 
 ### 1. **PatientAPI** - Веб-сервис
 
@@ -48,6 +51,18 @@ PatientConsoleWithoutDocker/
 
 **Назначение**: Утилита для автоматической генерации 100 тестовых пациентов через API.
 
+### 3. **PatientAPI.Tests** - Модульные тесты
+
+```
+PatientAPI.Tests/
+├── PatientsControllerTests.cs      # Тесты контроллера
+├── FhirDateParserTests.cs           # Тесты парсера FHIR дат
+├── TestDbContextFactory.cs          # Фабрика для InMemory БД
+└── Usings.cs                        # Глобальные using
+```
+
+**Назначение**: Модульные тесты для проверки работоспособности API с использованием InMemory Database.
+
 ---
 
 ## Структура базы данных
@@ -70,12 +85,12 @@ CREATE TABLE PatientInfos (
     Id UNIQUEIDENTIFIER PRIMARY KEY,
     Use NVARCHAR(50),
     Family NVARCHAR(100) NOT NULL,
-    Given NVARCHAR(MAX)
+    Given NVARCHAR(MAX) -- хранится как JSON
 )
 ```
 
 ### Связи:
-- **One-to-One**: Каждый пациент имеет одну запись с именем
+- **One-to-One**: Каждый пациент имеет одну запись с именем (каскадное удаление)
 
 ---
 
@@ -85,7 +100,7 @@ CREATE TABLE PatientInfos (
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| GET | `/api/patients` | Получение всех пациентов с фильтрацией |
+| GET | `/api/patients` | Получение всех пациентов с пагинацией |
 | GET | `/api/patients/{id}` | Получение пациента по ID |
 | POST | `/api/patients` | Создание нового пациента |
 | PUT | `/api/patients/{id}` | Полное обновление пациента |
@@ -96,48 +111,57 @@ CREATE TABLE PatientInfos (
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
+| GET | `/api/patients/search` | Поиск пациентов по дате рождения (FHIR) |
 | GET | `/api/patients/count` | Получение количества пациентов |
 | GET | `/api/patients/info` | Получение справочников и версии API |
 
-### Параметры фильтрации для GET /api/patients
+### Параметры пагинации для GET /api/patients
 
 | Параметр | Тип | Описание | Пример |
 |----------|-----|----------|---------|
-| family | string | Фильтр по фамилии | `?family=Иванов` |
-| given | string | Фильтр по имени | `?given=Иван` |
-| gender | string | Фильтр по полу | `?gender=male` |
-| active | bool | Фильтр по активности | `?active=true` |
-| birthDate | string | FHIR-формат даты | `?birthDate=gt2024-01-01` |
-| limit | int | Пагинация (1-1000) | `?limit=50` |
-| offset | int | Смещение | `?offset=100` |
+| limit | int | Лимит записей (1-1000, по умолч. 100) | `?limit=50` |
+| offset | int | Смещение для пагинации | `?offset=100` |
 
-### FHIR-форматы для поиска по дате рождения
+### Заголовки ответа для пагинации
 
-| Префикс | Значение | Пример |
-|---------|----------|--------|
-| eq | равно | `?birthDate=eq2024-01-13` |
-| ne | не равно | `?birthDate=ne2024-01-13` |
-| lt | меньше | `?birthDate=lt2024-01-01` |
-| gt | больше | `?birthDate=gt2024-12-31` |
-| le | меньше или равно | `?birthDate=le2024-06-30` |
-| ge | больше или равно | `?birthDate=ge2024-06-30` |
-| sa | начинается после | `?birthDate=sa2024-01-01` |
-| eb | заканчивается до | `?birthDate=eb2024-12-31` |
-| ap | примерно | `?birthDate=ap2024-01-13` |
+| Заголовок | Описание |
+|-----------|----------|
+| X-Total-Count | Общее количество записей |
+| X-Limit | Запрошенный лимит |
+| X-Offset | Запрошенное смещение |
+
+### FHIR-форматы для поиска по дате рождения (endpoint: `/api/patients/search`)
+
+| Префикс | Значение | Пример | Описание |
+|---------|----------|--------|----------|
+| eq | равно | `?birthDate=eq2024-01-13` | Точное совпадение даты |
+| ne | не равно | `?birthDate=ne2024-01-13` | Все кроме указанной даты |
+| lt | меньше | `?birthDate=lt2024-01-01` | Даты до указанной |
+| gt | больше | `?birthDate=gt2024-01-01` | Даты после указанной |
+| le | меньше или равно | `?birthDate=le2024-01-01` | Даты до и включая указанную |
+| ge | больше или равно | `?birthDate=ge2024-01-01` | Даты после и включая указанную |
+| sa | starts after | `?birthDate=sa2024-01-01` | Даты строго после указанной |
+| eb | ends before | `?birthDate=eb2024-01-01` | Даты строго до указанной |
+| ap | approximately | `?birthDate=ap2024-01-13` | Даты в пределах +/- 1 дня |
 
 ---
 
-## PatientConsoleWithoutDocker - Консольный генератор
+## PatientConsoleApplication - Консольный генератор
 
 ### Назначение
 Консольное приложение для автоматического заполнения базы данных тестовыми пациентами.
 
 ### Функциональность
-- Генерирует 100 уникальных пациентов (если в базе меньше 100)
+- Генерирует до 100 уникальных пациентов (проверяет текущее количество)
 - Использует реалистичные данные (имена, фамилии, отчества с учетом пола)
 - Работает в два потока для ускорения генерации
-- Проверяет текущее количество пациентов перед добавлением
-- Предотвращает превышение лимита в 100 пациентов
+- Проверяет доступность API перед началом работы
+- Интерактивное меню с несколькими режимами:
+  - Автоматическое заполнение
+  - Заполнение из JSON-файла
+  - Ручной ввод данных
+  - Просмотр текущего количества записей
+  - Проверка подключения к API
 
 ### Генерируемые данные
 - **Мужские имена**: Иван, Петр, Сергей, Алексей, Дмитрий, Андрей, Михаил, Николай, Александр, Владимир
@@ -149,9 +173,51 @@ CREATE TABLE PatientInfos (
 
 ### Запуск генератора
 ```bash
-cd PatientConsoleWithoutDocker
+cd PatientConsoleApplication
 dotnet run
 ```
+
+---
+
+## PatientAPI.Tests - Модульные тесты
+
+### Назначение
+Проект с модульными тестами для проверки работоспособности API.
+
+### Используемые технологии
+- **NUnit** - фреймворк для тестирования
+- **Moq** - создание mock-объектов
+- **Microsoft.EntityFrameworkCore.InMemory** - InMemory база данных для тестов
+- **FluentAssertions** - удобные assertions (опционально)
+
+### Тестируемые сценарии
+
+#### Контроллер (37 тестов):
+- **GET /api/patients** - проверка пагинации и валидации параметров
+- **GET /api/patients/search** - проверка всех 9 FHIR операторов
+- **GET /api/patients/{id}** - получение по ID (успех/неудача)
+- **GET /api/patients/count** - подсчет количества записей
+- **POST /api/patients** - создание пациента (валидация данных)
+- **PUT /api/patients/{id}** - обновление пациента
+- **PATCH /api/patients/{id}** - переключение статуса активности
+- **DELETE /api/patients/{id}** - удаление пациента
+- **GET /api/patients/info** - получение справочников
+
+#### Парсер FHIR дат (14 тестов):
+- Проверка всех префиксов (eq, ne, lt, gt, le, ge, sa, eb, ap)
+- Обработка некорректных форматов
+- Обработка дат без префикса
+
+### Запуск тестов
+
+#### Через терминал:
+```bash
+cd PatientAPI.Tests
+dotnet test
+```
+
+#### Через Visual Studio:
+- **Test → Test Explorer** → Run All
 
 ---
 
@@ -169,14 +235,19 @@ docker-compose up --build
 ```bash
 cd PatientAPI
 dotnet restore
-dotnet ef database update
 dotnet run
 ```
 
-### Запуск PatientConsoleWithoutDocker (генератор данных)
+### Запуск PatientConsoleApplication (генератор данных)
 ```bash
-cd PatientConsoleWithoutDocker
+cd PatientConsoleApplication
 dotnet run
+```
+
+### Запуск тестов
+```bash
+cd PatientAPI.Tests
+dotnet test
 ```
 
 ---
@@ -193,24 +264,32 @@ dotnet run
 
 ## Postman коллекция
 
-В проекте included Postman коллекция `PatientCollection.postman_collection.json` со всеми методами API:
+В проекте включена Postman коллекция `PatientCollection.postman_collection.json` со всеми методами API:
 
-- **GetAll** - получение всех пациентов
-- **GetById** - получение по ID
-- **Add** - добавление пациента
-- **Update** - обновление пациента
-- **Delete** - удаление пациента
-- **SearchBirthDate_eq** - поиск по дате (равно)
-- **SearchBirthDate_ne** - поиск по дате (не равно)
-- **SearchBirthDate_lt** - поиск по дате (меньше)
-- **SearchBirthDate_gt** - поиск по дате (больше)
-- **SearchBirthDate_le** - поиск по дате (меньше или равно)
-- **SearchBirthDate_ge** - поиск по дате (больше или равно)
-- **SearchBirthDate_sa** - поиск по дате (начинается после)
-- **SearchBirthDate_eb** - поиск по дате (заканчивается до)
-- **SearchBirthDate_ap** - поиск по дате (примерно)
-- **Info** - получение справочников и информации об API
-- **GetCount** - получение количества записей
+### Основные методы:
+- **1. Получение всех пациентов (с пагинацией)** - GET /api/patients?limit=10&offset=0
+- **2. Получение информации об API** - GET /api/patients/info
+- **3. Получение пациента по ID** - GET /api/patients/{id}
+- **4. Создание нового пациента** - POST /api/patients
+- **5. Обновление пациента** - PUT /api/patients/{id}
+- **6. Удаление пациента** - DELETE /api/patients/{id}
+
+### Поиск по дате рождения (FHIR):
+- **7.1 eq (равно)** - GET /api/patients/search?birthDate=eq2024-01-13
+- **7.2 ne (не равно)** - GET /api/patients/search?birthDate=ne2024-01-13
+- **7.3 lt (меньше)** - GET /api/patients/search?birthDate=lt2024-01-01
+- **7.4 gt (больше)** - GET /api/patients/search?birthDate=gt2024-01-01
+- **7.5 le (меньше или равно)** - GET /api/patients/search?birthDate=le2024-01-01
+- **7.6 ge (больше или равно)** - GET /api/patients/search?birthDate=ge2024-01-01
+- **7.7 sa (starts after)** - GET /api/patients/search?birthDate=sa2024-01-01
+- **7.8 eb (ends before)** - GET /api/patients/search?birthDate=eb2024-01-01
+- **7.9 ap (approximately)** - GET /api/patients/search?birthDate=ap2024-01-13
+- **7.10 без префикса (по умолчанию eq)** - GET /api/patients/search?birthDate=2024-01-13
+
+### Дополнительные методы:
+- **8. Получение количества пациентов** - GET /api/patients/count
+- **9. Получение количества активных пациентов** - GET /api/patients/count?active=true
+- **10. Переключение статуса активности (PATCH)** - PATCH /api/patients/{id}
 
 ---
 
@@ -233,7 +312,7 @@ dotnet run
 ```json
 {
   "name": {
-    "id": "d8ff176f-bd0a-4b8e-b329-871952e32e1f",
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "use": "official",
     "family": "Иванов",
     "given": ["Иван", "Иванович"]
@@ -255,6 +334,8 @@ API обеспечивает многоуровневую валидацию:
 3. **Длина полей**: защита от DoS-атак
 4. **Формат данных**: FHIR для дат, regex для имен
 5. **Логические проверки**: дата не в будущем, возраст не более 150 лет
+6. **Защита от SQL-инъекций**: через Entity Framework Core
+7. **Пагинация**: ограничение лимита (1-1000), проверка смещения
 
 ---
 
@@ -270,23 +351,46 @@ API обеспечивает многоуровневую валидацию:
 ### Тома:
 - **sql_data**: персистентное хранение данных БД
 
+### Запуск:
+```bash
+docker-compose up --build
+```
+
 ---
 
 ## Тестирование
 
-### Swagger
+### Swagger UI
 Откройте http://localhost:5000/swagger для интерактивного тестирования API
 
 ### Postman
 Импортируйте `PatientCollection.postman_collection.json` в Postman
 
+### Модульные тесты
+```bash
+cd PatientAPI.Tests
+dotnet test
+```
+
 ### Консольный генератор
 ```bash
-cd PatientConsoleWithoutDocker
+cd PatientConsoleApplication
 dotnet run
 ```
-Сгенерирует 100 тестовых пациентов (если их меньше 100)
+Сгенерирует тестовых пациентов (до 100 записей)
 
 ---
 
+## Технологии
+
+- **.NET 6** - платформа разработки
+- **ASP.NET Core** - веб-фреймворк
+- **Entity Framework Core 6** - ORM
+- **SQL Server** - база данных
+- **Docker** - контейнеризация
+- **Swagger** - документация API
+- **NUnit** - модульное тестирование
+- **Moq** - mocking для тестов
+- **Postman** - тестирование API
+```
 
