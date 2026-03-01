@@ -44,6 +44,9 @@ class Program
         bool exit = false;
         while (!exit)
         {
+            // Обновляем статус API перед каждым показом меню
+            await UpdateApiStatus();
+
             ShowMainMenu();
             string choice = Console.ReadLine() ?? "";
 
@@ -126,6 +129,7 @@ class Program
 
     static async Task SetupApiConnection()
     {
+        ShowAsciiArt();
         Console.Write("Введите URL API (по умолчанию http://localhost:5000): ");
         string? input = Console.ReadLine();
         if (!string.IsNullOrWhiteSpace(input))
@@ -138,8 +142,25 @@ class Program
         }
 
         client.BaseAddress = new Uri(_baseUrl);
+        client.Timeout = TimeSpan.FromSeconds(5); // Устанавливаем таймаут для быстрого определения недоступности
 
         _apiAvailable = await TestConnection();
+    }
+
+    /// <summary>
+    /// Обновляет статус API без вывода сообщений
+    /// </summary>
+    static async Task UpdateApiStatus()
+    {
+        try
+        {
+            var response = await client.GetAsync("/api/patients/info");
+            _apiAvailable = response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            _apiAvailable = false;
+        }
     }
 
     static async Task<bool> TestConnection()
@@ -205,6 +226,13 @@ class Program
 
     static async Task AutoFillDatabase()
     {
+        // Проверяем доступность API перед началом операции
+        if (!_apiAvailable)
+        {
+            Console.WriteLine("[ОШИБКА] API недоступно. Операция невозможна.");
+            return;
+        }
+
         Console.Clear();
         Console.WriteLine("=== АВТОМАТИЧЕСКОЕ ЗАПОЛНЕНИЕ БАЗЫ ДАННЫХ ===");
         Console.WriteLine();
@@ -273,6 +301,13 @@ class Program
 
     static async Task FillFromFile()
     {
+        // Проверяем доступность API перед началом операции
+        if (!_apiAvailable)
+        {
+            Console.WriteLine("[ОШИБКА] API недоступно. Операция невозможна.");
+            return;
+        }
+
         Console.Clear();
         Console.WriteLine("=== ЗАПОЛНЕНИЕ ИЗ ФАЙЛА patientList.json ===");
         Console.WriteLine();
@@ -380,6 +415,13 @@ class Program
 
     static async Task ManualFill()
     {
+        // Проверяем доступность API перед началом операции
+        if (!_apiAvailable)
+        {
+            Console.WriteLine("[ОШИБКА] API недоступно. Операция невозможна.");
+            return;
+        }
+
         Console.Clear();
         Console.WriteLine("=== РУЧНОЕ ЗАПОЛНЕНИЕ БАЗЫ ДАННЫХ ===");
         Console.WriteLine("(Через каждые 5 пациентов будет предложено автоматическое заполнение)");

@@ -181,7 +181,7 @@ dotnet run
 
 ---
 
-## 🔌 Доступ к сервисам
+## Доступ к сервисам
 
 | Сервис | URL | Порт |
 |--------|-----|------|
@@ -191,7 +191,7 @@ dotnet run
 
 ---
 
-## 📮 Postman коллекция
+## Postman коллекция
 
 В проекте included Postman коллекция `PatientCollection.postman_collection.json` со всеми методами API:
 

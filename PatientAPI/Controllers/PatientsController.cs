@@ -96,27 +96,34 @@ public class PatientsController : ControllerBase
         [FromQuery] int? limit = 100,
         [FromQuery] int? offset = 0)
     {
+        _logger.LogInformation("Начало получения пациентов с параметрами: Family={Family}, Given={Given}, BirthDate={BirthDate}, Gender={Gender}, Active={Active}, Limit={Limit}, Offset={Offset}",
+            family, given, birthDate, gender, active, limit, offset);
+
         try
         {
             // Валидация входных параметров
             if (limit.HasValue && (limit.Value < 1 || limit.Value > 1000))
             {
+                _logger.LogWarning("Неверное значение лимита: {Limit}", limit);
                 return BadRequest(new { error = "Лимит должен быть от 1 до 1000" });
             }
 
             if (offset.HasValue && offset.Value < 0)
             {
+                _logger.LogWarning("Неверное значение смещения: {Offset}", offset);
                 return BadRequest(new { error = "Смещение не может быть отрицательным" });
             }
 
             // Санитизация поисковых запросов
             if (!string.IsNullOrWhiteSpace(family) && !IsValidSearchTerm(family))
             {
+                _logger.LogWarning("Недопустимые символы в фамилии: {Family}", family);
                 return BadRequest(new { error = "Фамилия содержит недопустимые символы" });
             }
 
             if (!string.IsNullOrWhiteSpace(given) && !IsValidSearchTerm(given))
             {
+                _logger.LogWarning("Недопустимые символы в имени: {Given}", given);
                 return BadRequest(new { error = "Имя содержит недопустимые символы" });
             }
 
@@ -126,6 +133,7 @@ public class PatientsController : ControllerBase
                 var genderLower = gender.ToLower();
                 if (!ValidGenders.Contains(genderLower))
                 {
+                    _logger.LogWarning("Неверное значение пола: {Gender}", gender);
                     return BadRequest(new
                     {
                         error = "Недопустимое значение пола",
@@ -171,6 +179,7 @@ public class PatientsController : ControllerBase
             {
                 if (birthDate.Length > 50)
                 {
+                    _logger.LogWarning("Слишком длинный параметр даты: {Length} символов", birthDate.Length);
                     return BadRequest(new { error = "Параметр даты слишком длинный" });
                 }
 
@@ -181,47 +190,54 @@ public class PatientsController : ControllerBase
                     // Валидация даты
                     if (date.Value > DateTime.UtcNow)
                     {
+                        _logger.LogWarning("Дата рождения в будущем: {BirthDate}", date.Value);
                         return BadRequest(new { error = "Дата рождения не может быть в будущем" });
                     }
 
                     if (date.Value < DateTime.UtcNow.AddYears(-150))
                     {
+                        _logger.LogWarning("Дата рождения слишком старая: {BirthDate}", date.Value);
                         return BadRequest(new { error = "Дата рождения слишком далеко в прошлом" });
                     }
 
                     query = prefix switch
                     {
-                        "eq" => query.Where(p => p.BirthDate.Date == date.Value.Date), // равно
-                        "ne" => query.Where(p => p.BirthDate.Date != date.Value.Date), // не равно
-                        "lt" => query.Where(p => p.BirthDate.Date < date.Value.Date), // меньше
-                        "gt" => query.Where(p => p.BirthDate.Date > date.Value.Date), // больше
-                        "le" => query.Where(p => p.BirthDate.Date <= date.Value.Date), // меньше или равно
-                        "ge" => query.Where(p => p.BirthDate.Date >= date.Value.Date), // больше или равно
-                        "sa" => query.Where(p => p.BirthDate.Date > date.Value.Date), // после
-                        "eb" => query.Where(p => p.BirthDate.Date < date.Value.Date), // до
-                        "ap" => query.Where(p => // приблизительно (в пределах дня)
+                        "eq" => query.Where(p => p.BirthDate.Date == date.Value.Date),
+                        "ne" => query.Where(p => p.BirthDate.Date != date.Value.Date),
+                        "lt" => query.Where(p => p.BirthDate.Date < date.Value.Date),
+                        "gt" => query.Where(p => p.BirthDate.Date > date.Value.Date),
+                        "le" => query.Where(p => p.BirthDate.Date <= date.Value.Date),
+                        "ge" => query.Where(p => p.BirthDate.Date >= date.Value.Date),
+                        "sa" => query.Where(p => p.BirthDate.Date > date.Value.Date),
+                        "eb" => query.Where(p => p.BirthDate.Date < date.Value.Date),
+                        "ap" => query.Where(p =>
                             p.BirthDate.Date >= date.Value.AddDays(-1).Date &&
                             p.BirthDate.Date <= date.Value.AddDays(1).Date),
-                        _ => query.Where(p => p.BirthDate.Date == date.Value.Date) // по умолчанию равно
+                        _ => query.Where(p => p.BirthDate.Date == date.Value.Date)
                     };
+
+                    _logger.LogDebug("Применен FHIR фильтр: {Prefix} {Date}", prefix, date.Value);
                 }
                 else
                 {
+                    _logger.LogWarning("Неверный формат даты: {BirthDate}", birthDate);
                     return BadRequest(new { error = "Неверный формат даты. Используйте ГГГГ-ММ-ДД или FHIR формат (eq2024-01-13)" });
                 }
             }
 
             // Пагинация
+            var totalCount = await query.CountAsync();
             var result = await query
                 .Skip(offset.Value)
                 .Take(limit.Value)
                 .ToListAsync();
 
             // Добавление заголовков пагинации
-            Response.Headers.Add("X-Total-Count", (await query.CountAsync()).ToString());
+            Response.Headers.Add("X-Total-Count", totalCount.ToString());
             Response.Headers.Add("X-Limit", limit.Value.ToString());
             Response.Headers.Add("X-Offset", offset.Value.ToString());
 
+            _logger.LogInformation("Успешно получено {Count} пациентов из {TotalCount}", result.Count, totalCount);
             return Ok(result);
         }
         catch (Exception ex)
@@ -243,11 +259,14 @@ public class PatientsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<Patient>> GetPatient(Guid id)
     {
+        _logger.LogInformation("Начало получения пациента с ID: {Id}", id);
+
         try
         {
             // Проверка корректности ID
             if (id == Guid.Empty)
             {
+                _logger.LogWarning("Попытка получения пациента с пустым ID");
                 return BadRequest(new { error = "Неверный идентификатор пациента" });
             }
 
@@ -263,6 +282,7 @@ public class PatientsController : ControllerBase
                 return NotFound($"Пациент с ID {id} не найден.");
             }
 
+            _logger.LogInformation("Пациент с ID {Id} успешно получен", id);
             return Ok(patient);
         }
         catch (Exception ex)
@@ -285,6 +305,8 @@ public class PatientsController : ControllerBase
     public async Task<ActionResult<object>> GetPatientsCount(
         [FromQuery] bool? active = null)
     {
+        _logger.LogInformation("Начало подсчета пациентов с фильтром Active={Active}", active);
+
         try
         {
             var query = _context.Patients.AsQueryable();
@@ -293,10 +315,12 @@ public class PatientsController : ControllerBase
             if (active.HasValue)
             {
                 query = query.Where(p => p.Active == active.Value);
+                _logger.LogDebug("Применен фильтр по активности: {Active}", active.Value);
             }
 
             var count = await query.CountAsync();
 
+            _logger.LogInformation("Подсчет пациентов завершен. Результат: {Count}", count);
             return Ok(new
             {
                 totalCount = count
@@ -322,11 +346,14 @@ public class PatientsController : ControllerBase
     public async Task<ActionResult<Patient>> CreatePatient(
        Patient patient)
     {
+        _logger.LogInformation("Начало создания нового пациента");
+
         try
         {
             // Проверка наличия данных
             if (patient == null)
             {
+                _logger.LogWarning("Попытка создания пациента с null данными");
                 return BadRequest(new { error = "Данные пациента обязательны" });
             }
 
@@ -334,7 +361,8 @@ public class PatientsController : ControllerBase
             var currentCount = await _context.Patients.CountAsync();
             if (currentCount >= MaxPatientsLimit)
             {
-                _logger.LogWarning("Попытка создать пациента при достижении лимита {Limit}", MaxPatientsLimit);
+                _logger.LogWarning("Попытка создать пациента при достижении лимита {Limit}. Текущее количество: {CurrentCount}",
+                    MaxPatientsLimit, currentCount);
                 return BadRequest(new
                 {
                     error = "Достигнут максимальный лимит пациентов",
@@ -438,6 +466,7 @@ public class PatientsController : ControllerBase
 
             if (errors.Any())
             {
+                _logger.LogWarning("Ошибки валидации при создании пациента: {@Errors}", errors);
                 return BadRequest(new { errors });
             }
 
@@ -464,7 +493,7 @@ public class PatientsController : ControllerBase
                     .LoadAsync();
             }
 
-            _logger.LogInformation("Пациент создан с ID {Id}, активен: {Active}", patient.Name.Id, patient.Active);
+            _logger.LogInformation("Пациент успешно создан с ID {Id}, активен: {Active}", patient.Name.Id, patient.Active);
 
             return CreatedAtAction(nameof(GetPatient), new { id = patient.Name.Id }, patient);
         }
@@ -494,16 +523,20 @@ public class PatientsController : ControllerBase
     public async Task<IActionResult> UpdatePatient(
         Guid id, Patient patient)
     {
+        _logger.LogInformation("Начало обновления пациента с ID: {Id}", id);
+
         try
         {
             // Проверка соответствия ID
             if (id != patient.Name.Id)
             {
+                _logger.LogWarning("Несоответствие ID в URL ({UrlId}) и теле запроса ({BodyId})", id, patient.Name.Id);
                 return BadRequest(new { error = "ID в URL не соответствует ID пациента" });
             }
 
             if (id == Guid.Empty)
             {
+                _logger.LogWarning("Попытка обновления пациента с пустым ID");
                 return BadRequest(new { error = "Неверный идентификатор пациента" });
             }
 
@@ -561,6 +594,7 @@ public class PatientsController : ControllerBase
 
             if (errors.Any())
             {
+                _logger.LogWarning("Ошибки валидации при обновлении пациента {Id}: {@Errors}", id, errors);
                 return BadRequest(new { errors });
             }
 
@@ -570,6 +604,7 @@ public class PatientsController : ControllerBase
 
             if (existingPatient == null)
             {
+                _logger.LogWarning("Пациент с ID {Id} не найден для обновления", id);
                 return NotFound($"Пациент с ID {id} не найден.");
             }
 
@@ -587,7 +622,7 @@ public class PatientsController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Пациент обновлен с ID {Id}, активен: {Active}", id, patient.Active);
+            _logger.LogInformation("Пациент с ID {Id} успешно обновлен. Новый статус активности: {Active}", id, patient.Active);
 
             return NoContent();
         }
@@ -615,10 +650,13 @@ public class PatientsController : ControllerBase
     [HttpPatch("{id}")]
     public async Task<IActionResult> ToggleActive(Guid id)
     {
+        _logger.LogInformation("Начало переключения статуса активности для пациента с ID: {Id}", id);
+
         try
         {
             if (id == Guid.Empty)
             {
+                _logger.LogWarning("Попытка переключения статуса с пустым ID");
                 return BadRequest(new { error = "Неверный идентификатор пациента" });
             }
 
@@ -627,16 +665,17 @@ public class PatientsController : ControllerBase
 
             if (patient == null)
             {
+                _logger.LogWarning("Пациент с ID {Id} не найден для переключения статуса", id);
                 return NotFound($"Пациент с ID {id} не найден.");
             }
 
-            // Переключение статуса активности
+            var oldStatus = patient.Active;
             patient.Active = !patient.Active;
 
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Статус активности пациента с ID {Id} переключен. Новый статус: {Active}",
-                id, patient.Active);
+            _logger.LogInformation("Статус активности пациента с ID {Id} переключен. Старый статус: {OldStatus}, новый статус: {NewStatus}",
+                id, oldStatus, patient.Active);
 
             return Ok(new { id = patient.Name.Id, active = patient.Active });
         }
@@ -659,10 +698,13 @@ public class PatientsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeletePatient(Guid id)
     {
+        _logger.LogInformation("Начало удаления пациента с ID: {Id}", id);
+
         try
         {
             if (id == Guid.Empty)
             {
+                _logger.LogWarning("Попытка удаления пациента с пустым ID");
                 return BadRequest(new { error = "Неверный идентификатор пациента" });
             }
 
@@ -672,13 +714,14 @@ public class PatientsController : ControllerBase
 
             if (patient == null)
             {
+                _logger.LogWarning("Пациент с ID {Id} не найден для удаления", id);
                 return NotFound($"Пациент с ID {id} не найден.");
             }
 
             _context.Patients.Remove(patient);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Пациент удален с ID {Id}", id);
+            _logger.LogInformation("Пациент с ID {Id} успешно удален", id);
 
             return NoContent();
         }
@@ -701,6 +744,8 @@ public class PatientsController : ControllerBase
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public ActionResult<object> GetValidValues()
     {
+        _logger.LogDebug("Запрос справочной информации API");
+
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
         var version = assembly.GetName().Version;
         var buildDate = System.IO.File.GetLastWriteTime(assembly.Location);
@@ -708,7 +753,7 @@ public class PatientsController : ControllerBase
             .GetCustomAttributes<System.Reflection.AssemblyInformationalVersionAttribute>()
             .FirstOrDefault()?.InformationalVersion ?? version?.ToString() ?? "1.0.0";
 
-        return Ok(new
+        var response = new
         {
             // Справочные значения
             genders = ValidGenders,
@@ -724,7 +769,10 @@ public class PatientsController : ControllerBase
             apiName = "Patient API",
             description = "API для управления пациентами",
             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
-        });
+        };
+
+        _logger.LogInformation("Справочная информация успешно получена. Версия API: {Version}", informationalVersion);
+        return Ok(response);
     }
 
     #endregion
@@ -738,9 +786,16 @@ public class PatientsController : ControllerBase
     /// <returns>true, если имя допустимо</returns>
     private bool IsValidName(string name)
     {
-        return !string.IsNullOrWhiteSpace(name) &&
+        var isValid = !string.IsNullOrWhiteSpace(name) &&
                name.Length <= MaxStringLength &&
                NameRegex.IsMatch(name);
+
+        if (!isValid)
+        {
+            _logger.LogDebug("Строка '{Name}' не прошла валидацию имени", name);
+        }
+
+        return isValid;
     }
 
     /// <summary>
@@ -750,9 +805,16 @@ public class PatientsController : ControllerBase
     /// <returns>true, если запрос допустим</returns>
     private bool IsValidSearchTerm(string term)
     {
-        return string.IsNullOrWhiteSpace(term) ||
+        var isValid = string.IsNullOrWhiteSpace(term) ||
                (term.Length <= MaxStringLength &&
                 SearchTermRegex.IsMatch(term));
+
+        if (!isValid && !string.IsNullOrWhiteSpace(term))
+        {
+            _logger.LogDebug("Строка '{Term}' не прошла валидацию поискового запроса", term);
+        }
+
+        return isValid;
     }
 
     /// <summary>
@@ -764,6 +826,7 @@ public class PatientsController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(param) || param.Length > 50)
         {
+            _logger.LogDebug("Неверный параметр даты: {Param}", param);
             return ("", null);
         }
 
@@ -776,6 +839,7 @@ public class PatientsController : ControllerBase
                 var dateStr = param.Substring(prefix.Length);
                 if (DateTime.TryParse(dateStr, out var date))
                 {
+                    _logger.LogDebug("Распознан FHIR параметр: {Prefix} с датой {Date}", prefix, date);
                     return (prefix, date);
                 }
             }
@@ -783,9 +847,11 @@ public class PatientsController : ControllerBase
 
         if (DateTime.TryParse(param, out var defaultDate))
         {
+            _logger.LogDebug("Распознана простая дата: {Date}", defaultDate);
             return ("eq", defaultDate);
         }
 
+        _logger.LogDebug("Не удалось распознать дату: {Param}", param);
         return ("", null);
     }
 
