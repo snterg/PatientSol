@@ -6,6 +6,9 @@ namespace PatientAPI.Tests;
 
 public static class TestDbContextFactory
 {
+    /// <summary>
+    /// Создает новый экземпляр In-Memory БД для тестирования
+    /// </summary>
     public static AppDbContext CreateInMemoryDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -17,14 +20,19 @@ public static class TestDbContextFactory
         return context;
     }
 
+    /// <summary>
+    /// Заполняет БД тестовыми данными
+    /// </summary>
     public static void SeedTestData(AppDbContext context)
     {
+        // Очищаем существующие данные
         context.Patients.RemoveRange(context.Patients);
         context.PatientInfos.RemoveRange(context.PatientInfos);
         context.SaveChanges();
 
         var patients = GetTestPatients();
 
+        // Устанавливаем связи между Patient и PatientInfo
         foreach (var patient in patients)
         {
             if (patient.Id == Guid.Empty)
@@ -41,8 +49,12 @@ public static class TestDbContextFactory
         context.SaveChanges();
     }
 
+    /// <summary>
+    /// Возвращает список тестовых пациентов с предопределенными ID для предсказуемости тестов
+    /// </summary>
     public static List<Patient> GetTestPatients()
     {
+        // Используем фиксированные GUID для предсказуемости тестов
         var patientInfo1 = new PatientInfo
         {
             Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
@@ -97,6 +109,7 @@ public static class TestDbContextFactory
             Active = true
         };
 
+        // Устанавливаем обратную связь
         patientInfo1.Patient = patient1;
         patientInfo2.Patient = patient2;
         patientInfo3.Patient = patient3;
@@ -104,6 +117,9 @@ public static class TestDbContextFactory
         return new List<Patient> { patient1, patient2, patient3 };
     }
 
+    /// <summary>
+    /// Создает нового пациента для тестов
+    /// </summary>
     public static Patient GetNewPatient()
     {
         var patientInfo = new PatientInfo
