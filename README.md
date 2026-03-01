@@ -136,6 +136,10 @@ CREATE TABLE PatientInfos (
 ### Связи:
 - **One-to-One**: Каждый пациент имеет одну запись с именем (каскадное удаление)
 
+> **Важно**: База данных создается автоматически при первом запуске API. 
+> EF Core использует `EnsureCreated()` для создания БД и таблиц на основе моделей.
+> Миграции не требуются, все работает "из коробки".
+
 [🔝 к оглавлению](#содержание)
 
 ---
@@ -221,7 +225,7 @@ CREATE TABLE PatientInfos (
 
 ### Запуск генератора
 ```bash
-cd PatientConsoleApplication
+cd PatientConsoleWithoutDocker
 dotnet run
 ```
 
@@ -275,6 +279,8 @@ dotnet test
 
 ## Запуск проектов
 
+> **Важно**: Все команды выполняются из корневой папки решения `C:\Users\user\source\repos\PatientSol\`
+
 ### Запуск PatientAPI (веб-сервис)
 
 #### Вариант 1: Через Docker Compose (согласно технических требований)
@@ -289,10 +295,11 @@ cd PatientAPI
 dotnet restore
 dotnet run
 ```
+API будет доступен по адресу: http://localhost:5000
 
 ### Запуск PatientConsoleApplication (генератор данных)
 ```bash
-cd PatientConsoleApplication
+cd PatientConsoleWithoutDocker
 dotnet run
 ```
 
@@ -308,11 +315,11 @@ dotnet test
 
 ## Доступ к сервисам
 
-| Сервис | URL | Порт |
-|--------|-----|------|
+| Сервис | URL / Строка подключения | Порт |
+|--------|--------------------------|------|
 | PatientAPI | http://localhost:5000 | 5000 |
 | Swagger UI | http://localhost:5000/swagger | 5000 |
-| SQL Server | localhost,1433 | 1433 |
+| SQL Server | `Server=localhost,1433;Database=PatientDb;User Id=sa;Password=YourStrong!Password123;TrustServerCertificate=True;` | 1433 |
 
 [🔝 к оглавлению](#содержание)
 
@@ -320,7 +327,8 @@ dotnet test
 
 ## Postman коллекция
 
-В проекте включена Postman коллекция `PatientCollection.postman_collection.json` со всеми методами API:
+В проекте включена Postman коллекция `PatientCollection.postman_collection.json` со всеми методами API.
+Файл находится в корневой папке проекта `C:\Users\user\source\repos\PatientSol\`.
 
 ### Основные методы:
 - **1. Получение всех пациентов (с пагинацией)** - GET /api/patients?limit=10&offset=0
@@ -392,12 +400,12 @@ dotnet test
 API обеспечивает многоуровневую валидацию:
 
 1. **Обязательные поля**: name.family, birthDate
-2. **Справочники**: gender, active
-3. **Длина полей**: защита от DoS-атак
-4. **Формат данных**: FHIR для дат, regex для имен
+2. **Справочники**: gender, active (только разрешенные значения)
+3. **Длина полей**: защита от DoS-атак (max 100 символов для family, 50 для given)
+4. **Формат данных**: FHIR для дат (9 операторов), regex для имен (только буквы, пробелы, дефисы)
 5. **Логические проверки**: дата не в будущем, возраст не более 150 лет
 6. **Защита от SQL-инъекций**: через Entity Framework Core
-7. **Пагинация**: ограничение лимита (1-1000), проверка смещения
+7. **Пагинация**: ограничение лимита (1-1000), проверка смещения (offset >= 0)
 
 [🔝 к оглавлению](#содержание)
 
@@ -417,6 +425,7 @@ API обеспечивает многоуровневую валидацию:
 
 ### Запуск:
 ```bash
+cd PatientAPI
 docker-compose up --build
 ```
 
@@ -440,7 +449,7 @@ dotnet test
 
 ### Консольный генератор
 ```bash
-cd PatientConsoleApplication
+cd PatientConsoleWithoutDocker
 dotnet run
 ```
 Сгенерирует тестовых пациентов (до 100 записей)
