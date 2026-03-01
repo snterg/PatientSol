@@ -29,14 +29,14 @@ PatientAPI/
 ├── Controllers/
 │   └── PatientsController.cs      # REST API контроллер
 ├── Models/
-│   ├── Patient.cs                  # Модель пациента
-│   └── PatientInfo.cs              # Модель информации о пациенте
+│   ├── Patient.cs                 # Модель пациента
+│   └── PatientInfo.cs             # Модель информации о пациенте
 ├── Data/
-│   └── AppDbContext.cs             # Контекст базы данных
-├── Program.cs                       # Точка входа и настройка сервисов
-├── appsettings.json                 # Конфигурация приложения
-├── Dockerfile                        # Docker образ для API
-└── docker-compose.yml                # Оркестрация контейнеров
+│   └── AppDbContext.cs            # Контекст базы данных
+├── Program.cs                     # Точка входа и настройка сервисов
+├── appsettings.json               # Конфигурация приложения
+├── Dockerfile                     # Docker образ для API
+└── docker-compose.yml             # Оркестрация контейнеров
 ```
 
 **Назначение**: Веб-сервер, обрабатывающий HTTP запросы и взаимодействующий с базой данных.
@@ -56,9 +56,9 @@ PatientConsoleWithoutDocker/
 ```
 PatientAPI.Tests/
 ├── PatientsControllerTests.cs      # Тесты контроллера
-├── FhirDateParserTests.cs           # Тесты парсера FHIR дат
-├── TestDbContextFactory.cs          # Фабрика для InMemory БД
-└── Usings.cs                        # Глобальные using
+├── FhirDateParserTests.cs          # Тесты парсера FHIR дат
+├── TestDbContextFactory.cs         # Фабрика для InMemory БД
+└── Usings.cs                       # Глобальные using
 ```
 
 **Назначение**: Модульные тесты для проверки работоспособности API с использованием InMemory Database.
@@ -88,6 +88,23 @@ CREATE TABLE PatientInfos (
     Given NVARCHAR(MAX) -- хранится как JSON
 )
 ```
+
+erDiagram
+    Patient ||--|| PatientInfo : has
+    Patient {
+        guid Id PK "Внутренний ID (не отображается)"
+        guid PatientInfoId FK "Внешний ключ"
+        string Gender "male/female/other/unknown"
+        datetime BirthDate "Обязательное поле"
+        bool Active "true/false"
+    }
+    
+    PatientInfo {
+        guid Id PK "Публичный ID (отображается в API)"
+        string Use "official и др."
+        string Family "Фамилия (обязательное поле)"
+        string Given "JSON массив [имя, отчество]"
+    }
 
 ### Связи:
 - **One-to-One**: Каждый пациент имеет одну запись с именем (каскадное удаление)
