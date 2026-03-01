@@ -36,7 +36,6 @@ class Program
     static async Task Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
-  
 
         // Настройка подключения к API
         await SetupApiConnection();
@@ -151,18 +150,18 @@ class Program
             var response = await client.GetAsync("/api/patients/info");
             if (response.IsSuccessStatusCode)
             {
-                Console.WriteLine("✓ Успешно");
+                Console.WriteLine("[OK] Успешно");
                 return true;
             }
             else
             {
-                Console.WriteLine($"✗ Ошибка: {response.StatusCode}");
+                Console.WriteLine($"[ОШИБКА] {response.StatusCode}");
                 return false;
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"✗ Ошибка: {ex.Message}");
+            Console.WriteLine($"[ОШИБКА] {ex.Message}");
             return false;
         }
     }
@@ -222,7 +221,7 @@ class Program
 
         if (currentCount >= 100)
         {
-            Console.WriteLine("\n❌ Достигнут максимальный лимит в 100 пациентов!");
+            Console.WriteLine("\n[ОШИБКА] Достигнут максимальный лимит в 100 пациентов!");
             Console.WriteLine("Невозможно добавить больше записей.");
             return;
         }
@@ -268,7 +267,7 @@ class Program
 
         if (finalCount >= 100)
         {
-            Console.WriteLine("\n✅ Цель достигнута! База данных заполнена до 100 записей.");
+            Console.WriteLine("\n[ГОТОВО] Цель достигнута! База данных заполнена до 100 записей.");
         }
     }
 
@@ -282,7 +281,7 @@ class Program
 
         if (!File.Exists(filePath))
         {
-            Console.WriteLine($"❌ Файл {filePath} не найден!");
+            Console.WriteLine($"[ОШИБКА] Файл {filePath} не найден!");
             Console.WriteLine("Создайте файл patientList.json в корневой папке приложения.");
 
             // Создаем пример файла
@@ -297,7 +296,7 @@ class Program
 
             if (patients == null || patients.Count == 0)
             {
-                Console.WriteLine("❌ Файл не содержит данных или имеет неверный формат.");
+                Console.WriteLine("[ОШИБКА] Файл не содержит данных или имеет неверный формат.");
                 return;
             }
 
@@ -313,7 +312,7 @@ class Program
             int availableSlots = 100 - currentCount;
             if (availableSlots <= 0)
             {
-                Console.WriteLine("❌ База данных уже содержит 100 записей.");
+                Console.WriteLine("[ОШИБКА] База данных уже содержит 100 записей.");
                 return;
             }
 
@@ -351,13 +350,13 @@ class Program
                     if (response.IsSuccessStatusCode)
                     {
                         _successCount++;
-                        Console.WriteLine($"[{i + 1}/{toAdd}] ✓ Пациент добавлен");
+                        Console.WriteLine($"[{i + 1}/{toAdd}] [OK] Пациент добавлен");
                     }
                     else
                     {
                         _failCount++;
                         var error = await response.Content.ReadAsStringAsync();
-                        Console.WriteLine($"[{i + 1}/{toAdd}] ✗ Ошибка: {response.StatusCode}");
+                        Console.WriteLine($"[{i + 1}/{toAdd}] [ОШИБКА] {response.StatusCode}");
                     }
 
                     await Task.Delay(50);
@@ -365,17 +364,17 @@ class Program
                 catch (Exception ex)
                 {
                     _failCount++;
-                    Console.WriteLine($"[{i + 1}/{toAdd}] ✗ Исключение: {ex.Message}");
+                    Console.WriteLine($"[{i + 1}/{toAdd}] [ОШИБКА] {ex.Message}");
                 }
             }
 
             int finalCount = await GetCurrentPatientCount();
-            Console.WriteLine($"\n✅ Добавлено: {_successCount}, Ошибок: {_failCount}");
+            Console.WriteLine($"\n[ГОТОВО] Добавлено: {_successCount}, Ошибок: {_failCount}");
             Console.WriteLine($"Текущее количество записей: {finalCount}/100");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"❌ Ошибка при чтении файла: {ex.Message}");
+            Console.WriteLine($"[ОШИБКА] Ошибка при чтении файла: {ex.Message}");
         }
     }
 
@@ -394,7 +393,6 @@ class Program
         }
 
         int added = 0;
-        int manualCount = 0;
 
         while (currentCount < 100)
         {
@@ -407,7 +405,7 @@ class Program
             // Через каждые 5 добавленных пациентов предлагаем авто-заполнение
             if (added > 0 && added % 5 == 0)
             {
-                Console.WriteLine("🎯 Вы добавили 5 пациентов вручную!");
+                Console.WriteLine("[ИНФО] Вы добавили 5 пациентов вручную!");
                 Console.Write("Хотите заполнить оставшиеся места автоматически? (y/n): ");
 
                 if (Console.ReadLine()?.ToLower() == "y")
@@ -427,7 +425,7 @@ class Program
                     await Task.WhenAll(task1, task2);
 
                     added += _successCount;
-                    Console.WriteLine($"\n✅ Автоматически добавлено: {_successCount}");
+                    Console.WriteLine($"\n[ГОТОВО] Автоматически добавлено: {_successCount}");
                     break;
                 }
             }
@@ -442,18 +440,18 @@ class Program
                 if (response.IsSuccessStatusCode)
                 {
                     added++;
-                    Console.WriteLine($"\n✅ Пациент успешно добавлен!");
+                    Console.WriteLine($"\n[OK] Пациент успешно добавлен!");
                 }
                 else
                 {
                     var error = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"\n❌ Ошибка: {response.StatusCode}");
+                    Console.WriteLine($"\n[ОШИБКА] {response.StatusCode}");
                     Console.WriteLine($"Детали: {error}");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"\n❌ Исключение: {ex.Message}");
+                Console.WriteLine($"\n[ОШИБКА] {ex.Message}");
             }
 
             currentCount = await GetCurrentPatientCount();
@@ -466,7 +464,7 @@ class Program
             }
         }
 
-        Console.WriteLine($"\n✅ Ручное заполнение завершено. Всего добавлено: {added}");
+        Console.WriteLine($"\n[ГОТОВО] Ручное заполнение завершено. Всего добавлено: {added}");
     }
 
     static async Task GenerateBatch(int start, int count)
@@ -480,7 +478,7 @@ class Program
                 var currentCount = await GetCurrentPatientCount();
                 if (currentCount >= 100)
                 {
-                    Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ⏹️ Достигнут лимит в 100 пациентов");
+                    Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] [СТОП] Достигнут лимит в 100 пациентов");
                     break;
                 }
 
@@ -490,26 +488,26 @@ class Program
                 if (response.IsSuccessStatusCode)
                 {
                     Interlocked.Increment(ref _successCount);
-                    Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ✓ Пациент {i} создан (всего: {_successCount + _failCount})");
+                    Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] [OK] Пациент {i} создан (всего: {_successCount + _failCount})");
                 }
                 else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
                 {
                     var error = await response.Content.ReadAsStringAsync();
                     if (error.Contains("Maximum patients limit reached"))
                     {
-                        Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ⏹️ {error}");
+                        Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] [СТОП] {error}");
                         break;
                     }
                     else
                     {
                         Interlocked.Increment(ref _failCount);
-                        Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ✗ Пациент {i} ошибка: {response.StatusCode}");
+                        Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] [ОШИБКА] Пациент {i} ошибка: {response.StatusCode}");
                     }
                 }
                 else
                 {
                     Interlocked.Increment(ref _failCount);
-                    Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ✗ Пациент {i} ошибка: {response.StatusCode}");
+                    Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] [ОШИБКА] Пациент {i} ошибка: {response.StatusCode}");
                 }
 
                 await Task.Delay(50);
@@ -517,7 +515,7 @@ class Program
             catch (Exception ex)
             {
                 Interlocked.Increment(ref _failCount);
-                Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ✗ Пациент {i} исключение: {ex.Message}");
+                Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] [ОШИБКА] Пациент {i} исключение: {ex.Message}");
             }
         }
     }
@@ -686,7 +684,7 @@ class Program
         string json = JsonSerializer.Serialize(examplePatients, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(filePath, json);
 
-        Console.WriteLine($"✅ Создан пример файла: {filePath}");
+        Console.WriteLine($"[ГОТОВО] Создан пример файла: {filePath}");
         Console.WriteLine("Вы можете отредактировать его и добавить своих пациентов.");
     }
 
