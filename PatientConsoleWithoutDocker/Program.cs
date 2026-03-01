@@ -31,22 +31,15 @@ class Program
     private static readonly object _lockObject = new object();
     private static bool _apiAvailable = false;
 
+    #region Точка входа
+
     static async Task Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
-
-        ShowAsciiArt();
+  
 
         // Настройка подключения к API
         await SetupApiConnection();
-
-
-        {
-            Console.WriteLine("Не удалось подключиться к API. Программа будет завершена.");
-            Console.WriteLine("\nНажмите любую клавишу для выхода...");
-            Console.ReadKey();
-            return;
-        }
 
         // Главное меню
         bool exit = false;
@@ -89,7 +82,9 @@ class Program
         }
     }
 
-    #region UI Methods
+    #endregion
+
+    #region UI Methods (Методы интерфейса)
 
     static void ShowAsciiArt()
     {
@@ -112,9 +107,7 @@ class Program
     static void ShowMainMenu()
     {
         Console.Clear();
-        Console.WriteLine("=========================================");
-        Console.WriteLine("         PATIENT CONSOLE GENERATOR      ");
-        Console.WriteLine("=========================================");
+        ShowAsciiArt();
         Console.WriteLine();
         Console.WriteLine("Текущие настройки:");
         Console.WriteLine($"  API URL: {_baseUrl}");
@@ -138,7 +131,6 @@ class Program
         string? input = Console.ReadLine();
         if (!string.IsNullOrWhiteSpace(input))
         {
-
             _baseUrl = input;
         }
         else
@@ -191,7 +183,7 @@ class Program
 
     #endregion
 
-    #region Core Methods
+    #region Core Methods (Основные методы)
 
     static async Task<int> GetCurrentPatientCount()
     {
@@ -477,51 +469,6 @@ class Program
         Console.WriteLine($"\n✅ Ручное заполнение завершено. Всего добавлено: {added}");
     }
 
-    static object CreateManualPatient()
-    {
-        Console.WriteLine("\n--- Ввод данных пациента ---");
-
-        Console.Write("Фамилия (family): ");
-        string family = Console.ReadLine() ?? "Иванов";
-
-        Console.Write("Имя (given1): ");
-        string given1 = Console.ReadLine() ?? "Иван";
-
-        Console.Write("Отчество (given2): ");
-        string given2 = Console.ReadLine() ?? "Иванович";
-
-        Console.Write("Пол (male/female/other/unknown): ");
-        string gender = Console.ReadLine()?.ToLower() ?? "male";
-
-        Console.Write("Дата рождения (ГГГГ-ММ-ДД): ");
-        if (!DateTime.TryParse(Console.ReadLine(), out DateTime birthDate))
-        {
-            birthDate = GenerateRandomBirthDate();
-            Console.WriteLine($"Использована случайная дата: {birthDate:yyyy-MM-dd}");
-        }
-
-        Console.Write("Активен (true/false): ");
-        if (!bool.TryParse(Console.ReadLine(), out bool active))
-        {
-            active = random.Next(2) == 1;
-            Console.WriteLine($"Использовано значение: {active}");
-        }
-
-        return new
-        {
-            name = new
-            {
-                id = Guid.NewGuid(),
-                use = "official",
-                family = family,
-                given = new[] { given1, given2 }
-            },
-            gender = gender,
-            birthDate = birthDate.ToString("yyyy-MM-ddTHH:mm:ss"),
-            active = active
-        };
-    }
-
     static async Task GenerateBatch(int start, int count)
     {
         if (count <= 0) return;
@@ -573,6 +520,55 @@ class Program
                 Console.WriteLine($"[Поток {Thread.CurrentThread.ManagedThreadId}] ✗ Пациент {i} исключение: {ex.Message}");
             }
         }
+    }
+
+    #endregion
+
+    #region Generation Methods (Методы генерации данных)
+
+    static object CreateManualPatient()
+    {
+        Console.WriteLine("\n--- Ввод данных пациента ---");
+
+        Console.Write("Фамилия (family): ");
+        string family = Console.ReadLine() ?? "Иванов";
+
+        Console.Write("Имя (given1): ");
+        string given1 = Console.ReadLine() ?? "Иван";
+
+        Console.Write("Отчество (given2): ");
+        string given2 = Console.ReadLine() ?? "Иванович";
+
+        Console.Write("Пол (male/female/other/unknown): ");
+        string gender = Console.ReadLine()?.ToLower() ?? "male";
+
+        Console.Write("Дата рождения (ГГГГ-ММ-ДД): ");
+        if (!DateTime.TryParse(Console.ReadLine(), out DateTime birthDate))
+        {
+            birthDate = GenerateRandomBirthDate();
+            Console.WriteLine($"Использована случайная дата: {birthDate:yyyy-MM-dd}");
+        }
+
+        Console.Write("Активен (true/false): ");
+        if (!bool.TryParse(Console.ReadLine(), out bool active))
+        {
+            active = random.Next(2) == 1;
+            Console.WriteLine($"Использовано значение: {active}");
+        }
+
+        return new
+        {
+            name = new
+            {
+                id = Guid.NewGuid(),
+                use = "official",
+                family = family,
+                given = new[] { given1, given2 }
+            },
+            gender = gender,
+            birthDate = birthDate.ToString("yyyy-MM-ddTHH:mm:ss"),
+            active = active
+        };
     }
 
     static object GeneratePatient()
@@ -696,8 +692,12 @@ class Program
 
     #endregion
 
+    #region Helper Classes (Вспомогательные классы)
+
     class CountResponse
     {
         public int totalCount { get; set; }
     }
+
+    #endregion
 }

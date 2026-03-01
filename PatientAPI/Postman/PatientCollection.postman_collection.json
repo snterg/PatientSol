@@ -384,27 +384,6 @@
       "response": []
     },
     {
-      "name": "GetValidValues",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "http://localhost:5000/api/Patients/valid-values",
-          "protocol": "http",
-          "host": [
-            "localhost"
-          ],
-          "port": "5000",
-          "path": [
-            "api",
-            "Patients",
-            "valid-values"
-          ]
-        }
-      },
-      "response": []
-    },
-    {
       "name": "GetCount",
       "request": {
         "method": "GET",

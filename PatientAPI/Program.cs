@@ -84,7 +84,9 @@ using (var scope = app.Services.CreateScope())
 
 app.Run();
 
-// Parameter filter class must be after all top-level statements
+/// <summary>
+/// Фильтр для Swagger, добавляющий примеры значений для параметров запроса
+/// </summary>
 public class SwaggerParameterFilter : IParameterFilter
 {
     public void Apply(OpenApiParameter parameter, ParameterFilterContext context)

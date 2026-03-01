@@ -7,6 +7,9 @@ using System.Text.RegularExpressions;
 
 namespace PatientSolution.Controllers;
 
+/// <summary>
+/// Контроллер для управления пациентами
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class PatientsController : ControllerBase
@@ -14,22 +17,54 @@ public class PatientsController : ControllerBase
     private readonly AppDbContext _context;
     private readonly ILogger<PatientsController> _logger;
 
-    // Dictionaries from the task
+    /// <summary>
+    /// Допустимые значения пола из справочника
+    /// </summary>
     private static readonly List<string> ValidGenders = new() { "male", "female", "other", "unknown" };
+
+    /// <summary>
+    /// Допустимые значения статуса активности
+    /// </summary>
     private static readonly List<bool> ValidActive = new() { true, false };
+
+    /// <summary>
+    /// Максимальное количество пациентов в БД (защита от переполнения)
+    /// </summary>
     private const int MaxPatientsLimit = 1000;
 
-    // Maximum field lengths for DoS protection
+    /// <summary>
+    /// Максимальная длина фамилии (защита от DoS атак)
+    /// </summary>
     private const int MaxFamilyLength = 100;
+
+    /// <summary>
+    /// Максимальная длина имени (защита от DoS атак)
+    /// </summary>
     private const int MaxGivenLength = 50;
+
+    /// <summary>
+    /// Максимальная длина поля Use (защита от DoS атак)
+    /// </summary>
     private const int MaxUseLength = 50;
+
+    /// <summary>
+    /// Максимальное количество имен (защита от DoS атак)
+    /// </summary>
     private const int MaxGivenItems = 10;
+
+    /// <summary>
+    /// Максимальная длина строки для общих проверок
+    /// </summary>
     private const int MaxStringLength = 500;
 
-    // Regular expression for string validation (letters, spaces, hyphens only)
+    /// <summary>
+    /// Регулярное выражение для валидации имени (только буквы, пробелы, дефисы)
+    /// </summary>
     private static readonly Regex NameRegex = new(@"^[\p{L}\s\-]+$", RegexOptions.Compiled);
 
-    // Allowed characters for search
+    /// <summary>
+    /// Регулярное выражение для валидации поисковых запросов
+    /// </summary>
     private static readonly Regex SearchTermRegex = new(@"^[\p{L}\s\-0-9]*$", RegexOptions.Compiled);
 
     public PatientsController(AppDbContext context, ILogger<PatientsController> logger)
@@ -38,7 +73,19 @@ public class PatientsController : ControllerBase
         _logger = logger;
     }
 
-    #region Get all patients with filtering (GET /api/patients)
+    #region GET: Получение всех пациентов с фильтрацией
+
+    /// <summary>
+    /// Получает список пациентов с возможностью фильтрации
+    /// </summary>
+    /// <param name="family">Фильтр по фамилии</param>
+    /// <param name="given">Фильтр по имени</param>
+    /// <param name="birthDate">Фильтр по дате рождения (FHIR формат)</param>
+    /// <param name="gender">Фильтр по полу</param>
+    /// <param name="active">Фильтр по статусу активности</param>
+    /// <param name="limit">Лимит записей (по умолчанию 100)</param>
+    /// <param name="offset">Смещение для пагинации</param>
+    /// <returns>Список пациентов</returns>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Patient>>> GetPatients(
         [FromQuery] string? family = null,
@@ -51,29 +98,29 @@ public class PatientsController : ControllerBase
     {
         try
         {
-            // Input validation
+            // Валидация входных параметров
             if (limit.HasValue && (limit.Value < 1 || limit.Value > 1000))
             {
-                return BadRequest(new { error = "Limit must be between 1 and 1000" });
+                return BadRequest(new { error = "Лимит должен быть от 1 до 1000" });
             }
 
             if (offset.HasValue && offset.Value < 0)
             {
-                return BadRequest(new { error = "Offset must be non-negative" });
+                return BadRequest(new { error = "Смещение не может быть отрицательным" });
             }
 
-            // Search term sanitization
+            // Санитизация поисковых запросов
             if (!string.IsNullOrWhiteSpace(family) && !IsValidSearchTerm(family))
             {
-                return BadRequest(new { error = "Family name contains invalid characters" });
+                return BadRequest(new { error = "Фамилия содержит недопустимые символы" });
             }
 
             if (!string.IsNullOrWhiteSpace(given) && !IsValidSearchTerm(given))
             {
-                return BadRequest(new { error = "Given name contains invalid characters" });
+                return BadRequest(new { error = "Имя содержит недопустимые символы" });
             }
 
-            // Gender validation
+            // Валидация пола
             if (!string.IsNullOrWhiteSpace(gender))
             {
                 var genderLower = gender.ToLower();
@@ -81,8 +128,8 @@ public class PatientsController : ControllerBase
                 {
                     return BadRequest(new
                     {
-                        error = "Invalid gender value",
-                        message = $"Gender must be one of: {string.Join(", ", ValidGenders)}",
+                        error = "Недопустимое значение пола",
+                        message = $"Пол должен быть одним из: {string.Join(", ", ValidGenders)}",
                         providedValue = gender
                     });
                 }
@@ -93,80 +140,84 @@ public class PatientsController : ControllerBase
                 .AsNoTracking()
                 .AsQueryable();
 
-            // Filters
+            // Фильтр по фамилии
             if (!string.IsNullOrWhiteSpace(family) && family.Length <= MaxFamilyLength)
             {
                 query = query.Where(p => p.Name != null && p.Name.Family.Contains(family));
             }
 
+            // Фильтр по имени
             if (!string.IsNullOrWhiteSpace(given) && given.Length <= MaxGivenLength)
             {
                 query = query.Where(p => p.Name != null && p.Name.Given != null &&
                     p.Name.Given.Any(g => g != null && g.Contains(given)));
             }
 
+            // Фильтр по полу
             if (!string.IsNullOrWhiteSpace(gender))
             {
                 var genderLower = gender.ToLower();
                 query = query.Where(p => p.Gender != null && p.Gender.ToLower() == genderLower);
             }
 
+            // Фильтр по статусу активности
             if (active.HasValue)
             {
                 query = query.Where(p => p.Active == active.Value);
             }
 
-            // FHIR birthDate filter
+            // FHIR фильтр по дате рождения
             if (!string.IsNullOrWhiteSpace(birthDate))
             {
                 if (birthDate.Length > 50)
                 {
-                    return BadRequest(new { error = "BirthDate parameter is too long" });
+                    return BadRequest(new { error = "Параметр даты слишком длинный" });
                 }
 
                 var (prefix, date) = ParseFhirDateParameter(birthDate);
 
                 if (date.HasValue)
                 {
+                    // Валидация даты
                     if (date.Value > DateTime.UtcNow)
                     {
-                        return BadRequest(new { error = "BirthDate cannot be in the future" });
+                        return BadRequest(new { error = "Дата рождения не может быть в будущем" });
                     }
 
                     if (date.Value < DateTime.UtcNow.AddYears(-150))
                     {
-                        return BadRequest(new { error = "BirthDate is too far in the past" });
+                        return BadRequest(new { error = "Дата рождения слишком далеко в прошлом" });
                     }
 
                     query = prefix switch
                     {
-                        "eq" => query.Where(p => p.BirthDate.Date == date.Value.Date),
-                        "ne" => query.Where(p => p.BirthDate.Date != date.Value.Date),
-                        "lt" => query.Where(p => p.BirthDate.Date < date.Value.Date),
-                        "gt" => query.Where(p => p.BirthDate.Date > date.Value.Date),
-                        "le" => query.Where(p => p.BirthDate.Date <= date.Value.Date),
-                        "ge" => query.Where(p => p.BirthDate.Date >= date.Value.Date),
-                        "sa" => query.Where(p => p.BirthDate.Date > date.Value.Date),
-                        "eb" => query.Where(p => p.BirthDate.Date < date.Value.Date),
-                        "ap" => query.Where(p =>
+                        "eq" => query.Where(p => p.BirthDate.Date == date.Value.Date), // равно
+                        "ne" => query.Where(p => p.BirthDate.Date != date.Value.Date), // не равно
+                        "lt" => query.Where(p => p.BirthDate.Date < date.Value.Date), // меньше
+                        "gt" => query.Where(p => p.BirthDate.Date > date.Value.Date), // больше
+                        "le" => query.Where(p => p.BirthDate.Date <= date.Value.Date), // меньше или равно
+                        "ge" => query.Where(p => p.BirthDate.Date >= date.Value.Date), // больше или равно
+                        "sa" => query.Where(p => p.BirthDate.Date > date.Value.Date), // после
+                        "eb" => query.Where(p => p.BirthDate.Date < date.Value.Date), // до
+                        "ap" => query.Where(p => // приблизительно (в пределах дня)
                             p.BirthDate.Date >= date.Value.AddDays(-1).Date &&
                             p.BirthDate.Date <= date.Value.AddDays(1).Date),
-                        _ => query.Where(p => p.BirthDate.Date == date.Value.Date)
+                        _ => query.Where(p => p.BirthDate.Date == date.Value.Date) // по умолчанию равно
                     };
                 }
                 else
                 {
-                    return BadRequest(new { error = "Invalid birthDate format. Use YYYY-MM-DD or FHIR format (eq2024-01-13)" });
+                    return BadRequest(new { error = "Неверный формат даты. Используйте ГГГГ-ММ-ДД или FHIR формат (eq2024-01-13)" });
                 }
             }
 
-            // Pagination
+            // Пагинация
             var result = await query
                 .Skip(offset.Value)
                 .Take(limit.Value)
                 .ToListAsync();
 
-            // Pagination headers
+            // Добавление заголовков пагинации
             Response.Headers.Add("X-Total-Count", (await query.CountAsync()).ToString());
             Response.Headers.Add("X-Limit", limit.Value.ToString());
             Response.Headers.Add("X-Offset", offset.Value.ToString());
@@ -175,40 +226,32 @@ public class PatientsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting patients");
-            return StatusCode(500, new { error = "An error occurred while retrieving patients." });
+            _logger.LogError(ex, "Ошибка при получении пациентов");
+            return StatusCode(500, new { error = "Произошла ошибка при получении пациентов." });
         }
     }
+
     #endregion
 
-    
+    #region GET: Получение пациента по ID
 
-    #region Get patient by ID (GET /api/patients/{id})
     /// <summary>
-    /// Get a specific patient by ID
+    /// Получает пациента по идентификатору
     /// </summary>
-    /// <param name="id">Patient ID (from PatientInfo)</param>
-    /// <returns>The patient with specified ID</returns>
-    /// <response code="200">Returns the patient</response>
-    /// <response code="400">If the ID is invalid</response>
-    /// <response code="404">If the patient is not found</response>
-    /// <response code="500">If there was a server error</response>
+    /// <param name="id">Идентификатор пациента (Guid из поля Name.Id)</param>
+    /// <returns>Данные пациента</returns>
     [HttpGet("{id}")]
-    [ProducesResponseType(typeof(Patient), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(object), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(object), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<Patient>> GetPatient(Guid id)
     {
         try
         {
-            // Validate ID
+            // Проверка корректности ID
             if (id == Guid.Empty)
             {
-                return BadRequest(new { error = "Invalid patient ID" });
+                return BadRequest(new { error = "Неверный идентификатор пациента" });
             }
 
-            // Find patient by Name.Id (since Patient.Id is JsonIgnore)
+            // Поиск пациента по Name.Id
             var patient = await _context.Patients
                 .Include(p => p.Name)
                 .AsNoTracking()
@@ -216,21 +259,28 @@ public class PatientsController : ControllerBase
 
             if (patient == null)
             {
-                _logger.LogWarning("Patient with ID {Id} not found", id);
-                return NotFound($"Patient with ID {id} not found.");
+                _logger.LogWarning("Пациент с ID {Id} не найден", id);
+                return NotFound($"Пациент с ID {id} не найден.");
             }
 
             return Ok(patient);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting patient with ID {Id}", id);
-            return StatusCode(500, new { error = "An error occurred while retrieving the patient." });
+            _logger.LogError(ex, "Ошибка при получении пациента с ID {Id}", id);
+            return StatusCode(500, new { error = "Произошла ошибка при получении пациента." });
         }
     }
+
     #endregion
 
-    #region Get patients count (GET /api/patients/count)
+    #region GET: Получение количества пациентов
+
+    /// <summary>
+    /// Получает количество пациентов с возможностью фильтрации по активности
+    /// </summary>
+    /// <param name="active">Фильтр по статусу активности</param>
+    /// <returns>Количество пациентов</returns>
     [HttpGet("count")]
     public async Task<ActionResult<object>> GetPatientsCount(
         [FromQuery] bool? active = null)
@@ -239,6 +289,7 @@ public class PatientsController : ControllerBase
         {
             var query = _context.Patients.AsQueryable();
 
+            // Фильтр по статусу активности
             if (active.HasValue)
             {
                 query = query.Where(p => p.Active == active.Value);
@@ -253,33 +304,41 @@ public class PatientsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting patients count");
-            return StatusCode(500, new { error = "An error occurred while counting patients." });
+            _logger.LogError(ex, "Ошибка при подсчете пациентов");
+            return StatusCode(500, new { error = "Произошла ошибка при подсчете пациентов." });
         }
     }
+
     #endregion
 
-    #region Create new patient (POST /api/patients)
+    #region POST: Создание нового пациента
+
+    /// <summary>
+    /// Создает нового пациента
+    /// </summary>
+    /// <param name="patient">Данные пациента</param>
+    /// <returns>Созданный пациент</returns>
     [HttpPost]
     public async Task<ActionResult<Patient>> CreatePatient(
        Patient patient)
     {
         try
         {
+            // Проверка наличия данных
             if (patient == null)
             {
-                return BadRequest(new { error = "Patient data is required" });
+                return BadRequest(new { error = "Данные пациента обязательны" });
             }
 
-            // Check patient limit
+            // Проверка лимита пациентов
             var currentCount = await _context.Patients.CountAsync();
             if (currentCount >= MaxPatientsLimit)
             {
-                _logger.LogWarning("Attempted to create patient when maximum limit of {Limit} reached", MaxPatientsLimit);
+                _logger.LogWarning("Попытка создать пациента при достижении лимита {Limit}", MaxPatientsLimit);
                 return BadRequest(new
                 {
-                    error = "Maximum patients limit reached",
-                    message = $"Cannot create more than {MaxPatientsLimit} patients",
+                    error = "Достигнут максимальный лимит пациентов",
+                    message = $"Нельзя создать более {MaxPatientsLimit} пациентов",
                     currentCount = currentCount,
                     limit = MaxPatientsLimit
                 });
@@ -287,51 +346,51 @@ public class PatientsController : ControllerBase
 
             var errors = new List<string>();
 
-            // BirthDate validation
+            // Валидация даты рождения
             if (patient.BirthDate == default)
             {
-                errors.Add("BirthDate is required");
+                errors.Add("Дата рождения обязательна");
             }
             else
             {
                 if (patient.BirthDate > DateTime.UtcNow)
                 {
-                    errors.Add("BirthDate cannot be in the future");
+                    errors.Add("Дата рождения не может быть в будущем");
                 }
 
                 if (patient.BirthDate < DateTime.UtcNow.AddYears(-150))
                 {
-                    errors.Add("BirthDate is too far in the past");
+                    errors.Add("Дата рождения слишком далеко в прошлом");
                 }
             }
 
-            // Name validation
+            // Валидация имени
             if (patient.Name == null)
             {
-                errors.Add("Name is required");
+                errors.Add("Информация об имени обязательна");
             }
             else
             {
-                // Family validation
+                // Валидация фамилии
                 if (string.IsNullOrWhiteSpace(patient.Name.Family))
                 {
-                    errors.Add("Family name is required");
+                    errors.Add("Фамилия обязательна");
                 }
                 else if (patient.Name.Family.Length > MaxFamilyLength)
                 {
-                    errors.Add($"Family name cannot exceed {MaxFamilyLength} characters");
+                    errors.Add($"Фамилия не может превышать {MaxFamilyLength} символов");
                 }
                 else if (!IsValidName(patient.Name.Family))
                 {
-                    errors.Add("Family name contains invalid characters. Only letters, spaces, and hyphens are allowed.");
+                    errors.Add("Фамилия содержит недопустимые символы. Разрешены только буквы, пробелы и дефисы.");
                 }
 
-                // Given validation
+                // Валидация списка имен
                 if (patient.Name.Given != null)
                 {
                     if (patient.Name.Given.Count > MaxGivenItems)
                     {
-                        errors.Add($"Cannot have more than {MaxGivenItems} given names");
+                        errors.Add($"Нельзя указать более {MaxGivenItems} имен");
                     }
 
                     for (int i = 0; i < patient.Name.Given.Count; i++)
@@ -341,29 +400,29 @@ public class PatientsController : ControllerBase
                         {
                             if (given.Length > MaxGivenLength)
                             {
-                                errors.Add($"Given name at position {i + 1} cannot exceed {MaxGivenLength} characters");
+                                errors.Add($"Имя на позиции {i + 1} не может превышать {MaxGivenLength} символов");
                             }
                             else if (!IsValidName(given))
                             {
-                                errors.Add($"Given name at position {i + 1} contains invalid characters.");
+                                errors.Add($"Имя на позиции {i + 1} содержит недопустимые символы.");
                             }
                         }
                     }
                 }
 
-                // Use validation
+                // Валидация поля Use
                 if (!string.IsNullOrWhiteSpace(patient.Name.Use) && patient.Name.Use.Length > MaxUseLength)
                 {
-                    errors.Add($"Use cannot exceed {MaxUseLength} characters");
+                    errors.Add($"Поле Use не может превышать {MaxUseLength} символов");
                 }
             }
 
-            // Gender validation
+            // Валидация пола
             if (!string.IsNullOrWhiteSpace(patient.Gender))
             {
                 if (!ValidGenders.Contains(patient.Gender.ToLower()))
                 {
-                    errors.Add($"Invalid gender. Allowed values: {string.Join(", ", ValidGenders)}");
+                    errors.Add($"Недопустимый пол. Допустимые значения: {string.Join(", ", ValidGenders)}");
                 }
                 else
                 {
@@ -371,10 +430,10 @@ public class PatientsController : ControllerBase
                 }
             }
 
-            // Active validation
+            // Валидация статуса активности
             if (!ValidActive.Contains(patient.Active))
             {
-                errors.Add($"Invalid active value. Allowed values: {string.Join(", ", ValidActive)}");
+                errors.Add($"Недопустимое значение активности. Допустимые значения: {string.Join(", ", ValidActive)}");
             }
 
             if (errors.Any())
@@ -382,7 +441,7 @@ public class PatientsController : ControllerBase
                 return BadRequest(new { errors });
             }
 
-            // ID generation
+            // Генерация ID
             if (patient.Id == Guid.Empty)
             {
                 patient.Id = Guid.NewGuid();
@@ -393,11 +452,11 @@ public class PatientsController : ControllerBase
                 patient.Name.Id = Guid.NewGuid();
             }
 
-            // EF Core will set the relationship automatically
+            // Сохранение в БД
             _context.Patients.Add(patient);
             await _context.SaveChangesAsync();
 
-            // Load related data for response
+            // Загрузка связанных данных для ответа
             if (patient.Name != null)
             {
                 await _context.Entry(patient)
@@ -405,90 +464,99 @@ public class PatientsController : ControllerBase
                     .LoadAsync();
             }
 
-            _logger.LogInformation("Patient created with ID {Id}, Active: {Active}", patient.Name.Id, patient.Active);
+            _logger.LogInformation("Пациент создан с ID {Id}, активен: {Active}", patient.Name.Id, patient.Active);
 
             return CreatedAtAction(nameof(GetPatient), new { id = patient.Name.Id }, patient);
         }
         catch (DbUpdateException ex)
         {
-            _logger.LogError(ex, "Database error creating patient");
-            return StatusCode(500, new { error = "A database error occurred while creating the patient." });
+            _logger.LogError(ex, "Ошибка базы данных при создании пациента");
+            return StatusCode(500, new { error = "Произошла ошибка базы данных при создании пациента." });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating patient");
-            return StatusCode(500, new { error = "An error occurred while creating the patient." });
+            _logger.LogError(ex, "Ошибка при создании пациента");
+            return StatusCode(500, new { error = "Произошла ошибка при создании пациента." });
         }
     }
+
     #endregion
 
-    #region Update patient (PUT /api/patients/{id})
+    #region PUT: Полное обновление пациента
+
+    /// <summary>
+    /// Полностью обновляет данные пациента
+    /// </summary>
+    /// <param name="id">Идентификатор пациента</param>
+    /// <param name="patient">Новые данные пациента</param>
+    /// <returns>Статус операции</returns>
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdatePatient(
-        Guid id,Patient patient)
+        Guid id, Patient patient)
     {
         try
         {
+            // Проверка соответствия ID
             if (id != patient.Name.Id)
             {
-                return BadRequest(new { error = "ID in URL does not match patient ID" });
+                return BadRequest(new { error = "ID в URL не соответствует ID пациента" });
             }
 
             if (id == Guid.Empty)
             {
-                return BadRequest(new { error = "Invalid patient ID" });
+                return BadRequest(new { error = "Неверный идентификатор пациента" });
             }
 
             var errors = new List<string>();
 
-            // BirthDate validation
+            // Валидация даты рождения
             if (patient.BirthDate == default)
             {
-                errors.Add("BirthDate is required");
+                errors.Add("Дата рождения обязательна");
             }
             else
             {
                 if (patient.BirthDate > DateTime.UtcNow)
                 {
-                    errors.Add("BirthDate cannot be in the future");
+                    errors.Add("Дата рождения не может быть в будущем");
                 }
                 if (patient.BirthDate < DateTime.UtcNow.AddYears(-150))
                 {
-                    errors.Add("BirthDate is too far in the past");
+                    errors.Add("Дата рождения слишком далеко в прошлом");
                 }
             }
 
-            // Name validation
+            // Валидация имени
             if (patient.Name == null)
             {
-                errors.Add("Name is required");
+                errors.Add("Информация об имени обязательна");
             }
             else
             {
                 if (string.IsNullOrWhiteSpace(patient.Name.Family))
                 {
-                    errors.Add("Family name is required");
+                    errors.Add("Фамилия обязательна");
                 }
                 else if (patient.Name.Family.Length > MaxFamilyLength)
                 {
-                    errors.Add($"Family name cannot exceed {MaxFamilyLength} characters");
+                    errors.Add($"Фамилия не может превышать {MaxFamilyLength} символов");
                 }
                 else if (!IsValidName(patient.Name.Family))
                 {
-                    errors.Add("Family name contains invalid characters");
+                    errors.Add("Фамилия содержит недопустимые символы");
                 }
             }
 
-            // Gender validation
+            // Валидация пола
             if (!string.IsNullOrWhiteSpace(patient.Gender) && !ValidGenders.Contains(patient.Gender.ToLower()))
             {
-                errors.Add($"Invalid gender. Allowed values: {string.Join(", ", ValidGenders)}");
+                errors.Add($"Недопустимый пол. Допустимые значения: {string.Join(", ", ValidGenders)}");
             }
 
-            // Active validation
+            // Валидация статуса активности
             if (!ValidActive.Contains(patient.Active))
             {
-                errors.Add($"Invalid active value. Allowed values: {string.Join(", ", ValidActive)}");
+                errors.Add($"Недопустимое значение активности. Допустимые значения: {string.Join(", ", ValidActive)}");
             }
 
             if (errors.Any())
@@ -502,10 +570,10 @@ public class PatientsController : ControllerBase
 
             if (existingPatient == null)
             {
-                return NotFound($"Patient with ID {id} not found.");
+                return NotFound($"Пациент с ID {id} не найден.");
             }
 
-            // Update fields
+            // Обновление полей
             existingPatient.Gender = !string.IsNullOrWhiteSpace(patient.Gender) ? patient.Gender.ToLower() : null;
             existingPatient.BirthDate = patient.BirthDate;
             existingPatient.Active = patient.Active;
@@ -519,24 +587,31 @@ public class PatientsController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Patient updated with ID {Id}, Active: {Active}", id, patient.Active);
+            _logger.LogInformation("Пациент обновлен с ID {Id}, активен: {Active}", id, patient.Active);
 
             return NoContent();
         }
         catch (DbUpdateConcurrencyException ex)
         {
-            _logger.LogError(ex, "Concurrency conflict updating patient with ID {Id}", id);
-            return Conflict(new { error = "The patient was modified by another user. Please reload and try again." });
+            _logger.LogError(ex, "Конфликт параллельного обновления пациента с ID {Id}", id);
+            return Conflict(new { error = "Пациент был изменен другим пользователем. Обновите данные и повторите попытку." });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating patient with ID {Id}", id);
-            return StatusCode(500, new { error = "An error occurred while updating the patient." });
+            _logger.LogError(ex, "Ошибка при обновлении пациента с ID {Id}", id);
+            return StatusCode(500, new { error = "Произошла ошибка при обновлении пациента." });
         }
     }
+
     #endregion
 
-    #region Partially update patient (PATCH /api/patients/{id})
+    #region PATCH: Частичное обновление (переключение статуса)
+
+    /// <summary>
+    /// Переключает статус активности пациента
+    /// </summary>
+    /// <param name="id">Идентификатор пациента</param>
+    /// <returns>Новый статус активности</returns>
     [HttpPatch("{id}")]
     public async Task<IActionResult> ToggleActive(Guid id)
     {
@@ -544,7 +619,7 @@ public class PatientsController : ControllerBase
         {
             if (id == Guid.Empty)
             {
-                return BadRequest(new { error = "Invalid patient ID" });
+                return BadRequest(new { error = "Неверный идентификатор пациента" });
             }
 
             var patient = await _context.Patients
@@ -552,28 +627,35 @@ public class PatientsController : ControllerBase
 
             if (patient == null)
             {
-                return NotFound($"Patient with ID {id} not found.");
+                return NotFound($"Пациент с ID {id} не найден.");
             }
 
-            // Toggle active status
+            // Переключение статуса активности
             patient.Active = !patient.Active;
 
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Patient active status toggled for ID {Id}. New status: {Active}",
+            _logger.LogInformation("Статус активности пациента с ID {Id} переключен. Новый статус: {Active}",
                 id, patient.Active);
 
             return Ok(new { id = patient.Name.Id, active = patient.Active });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error toggling active status for patient {Id}", id);
-            return StatusCode(500, new { error = "An error occurred while toggling active status." });
+            _logger.LogError(ex, "Ошибка при переключении статуса активности для пациента {Id}", id);
+            return StatusCode(500, new { error = "Произошла ошибка при переключении статуса активности." });
         }
     }
+
     #endregion
 
-    #region Delete patient (DELETE /api/patients/{id})
+    #region DELETE: Удаление пациента
+
+    /// <summary>
+    /// Удаляет пациента
+    /// </summary>
+    /// <param name="id">Идентификатор пациента</param>
+    /// <returns>Статус операции</returns>
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeletePatient(Guid id)
     {
@@ -581,7 +663,7 @@ public class PatientsController : ControllerBase
         {
             if (id == Guid.Empty)
             {
-                return BadRequest(new { error = "Invalid patient ID" });
+                return BadRequest(new { error = "Неверный идентификатор пациента" });
             }
 
             var patient = await _context.Patients
@@ -590,30 +672,31 @@ public class PatientsController : ControllerBase
 
             if (patient == null)
             {
-                return NotFound($"Patient with ID {id} not found.");
+                return NotFound($"Пациент с ID {id} не найден.");
             }
 
             _context.Patients.Remove(patient);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Patient deleted with ID {Id}", id);
+            _logger.LogInformation("Пациент удален с ID {Id}", id);
 
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting patient with ID {Id}", id);
-            return StatusCode(500, new { error = "An error occurred while deleting the patient." });
+            _logger.LogError(ex, "Ошибка при удалении пациента с ID {Id}", id);
+            return StatusCode(500, new { error = "Произошла ошибка при удалении пациента." });
         }
     }
-    #endregion#region Get dictionaries (GET /api/patients/valid-values)
 
-    #region Get dictionaries (GET /api/patients/info)
+    #endregion
+
+    #region GET: Получение информации об API и справочниках
+
     /// <summary>
-    /// Gets valid values for dictionaries and API version
+    /// Получает допустимые значения для справочников и информацию об API
     /// </summary>
-    /// <returns>Dictionary values and API version</returns>
-    /// <response code="200">Returns dictionary values and version</response>
+    /// <returns>Справочные значения и версия API</returns>
     [HttpGet("info")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public ActionResult<object> GetValidValues()
@@ -627,26 +710,32 @@ public class PatientsController : ControllerBase
 
         return Ok(new
         {
-            // Dictionary values
+            // Справочные значения
             genders = ValidGenders,
             active = ValidActive,
 
-            // Version information
+            // Информация о версии
             version = informationalVersion,
-           
 
-            // Build information
+            // Информация о сборке
             buildDate = buildDate.ToString("yyyy-MM-dd HH:mm:ss"),
 
-            // API information
+            // Информация об API
             apiName = "Patient API",
-            description = "API for patient management",
+            description = "API для управления пациентами",
             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
         });
     }
+
     #endregion
 
-    #region Helper validation methods
+    #region Вспомогательные методы для валидации
+
+    /// <summary>
+    /// Проверяет, является ли строка допустимым именем
+    /// </summary>
+    /// <param name="name">Проверяемая строка</param>
+    /// <returns>true, если имя допустимо</returns>
     private bool IsValidName(string name)
     {
         return !string.IsNullOrWhiteSpace(name) &&
@@ -654,6 +743,11 @@ public class PatientsController : ControllerBase
                NameRegex.IsMatch(name);
     }
 
+    /// <summary>
+    /// Проверяет, является ли строка допустимым поисковым запросом
+    /// </summary>
+    /// <param name="term">Проверяемый запрос</param>
+    /// <returns>true, если запрос допустим</returns>
     private bool IsValidSearchTerm(string term)
     {
         return string.IsNullOrWhiteSpace(term) ||
@@ -661,6 +755,11 @@ public class PatientsController : ControllerBase
                 SearchTermRegex.IsMatch(term));
     }
 
+    /// <summary>
+    /// Разбирает параметр даты в формате FHIR
+    /// </summary>
+    /// <param name="param">Строка с префиксом и датой</param>
+    /// <returns>Кортеж (префикс, дата)</returns>
     private (string prefix, DateTime? date) ParseFhirDateParameter(string param)
     {
         if (string.IsNullOrWhiteSpace(param) || param.Length > 50)
@@ -689,5 +788,6 @@ public class PatientsController : ControllerBase
 
         return ("", null);
     }
+
     #endregion
 }
