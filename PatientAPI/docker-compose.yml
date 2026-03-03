@@ -27,7 +27,7 @@ services:
       retries: 10
       start_period: 30s
 
-  # Контейнер с вашим Web API
+  # Контейнер с Web API
   patientapi:
     build:
       context: .
